@@ -1,0 +1,20 @@
+commit fe889fd1e556b5baa9534b54dac040ae98ee7c2f
+Author: Ondřej Lysoněk <olysonek@redhat.com>
+Date:   Mon Feb 13 17:50:40 2017 +0100
+
+    plugin_selinux: Import exceptions
+    
+    Signed-off-by: Ondřej Lysoněk <olysonek@redhat.com>
+
+diff --git a/tuned/plugins/plugin_selinux.py b/tuned/plugins/plugin_selinux.py
+index 650c486..0e6959f 100644
+--- a/tuned/plugins/plugin_selinux.py
++++ b/tuned/plugins/plugin_selinux.py
+@@ -2,6 +2,7 @@ import os
+ import base
+ from decorators import *
+ import tuned.logs
++from tuned.plugins import exceptions
+ from tuned.utils.commands import commands
+ 
+ log = tuned.logs.get()

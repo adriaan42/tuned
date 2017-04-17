@@ -1,0 +1,6 @@
+modules.conf.patch
+pkgconfig.patch
+libexec.patch
+pkexec.patch
+fix-NF-FI-macros-in-manpages.patch
+plugin_selinux_exceptions.patch

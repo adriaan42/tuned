@@ -1,0 +1,70 @@
+From 325dd17ee5f19a84fe97987404edc78d9904fa27 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jaroslav=20=C5=A0karvada?= <jskarvad@redhat.com>
+Date: Wed, 21 Sep 2016 16:43:39 +0200
+Subject: [PATCH] tuned-gui: fixed pkexec to work from GNOME Shell
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+GNOME Shell doesn't seem to run applications through the shell or with some
+persistent parent, thus pkexec cannot be execed over the original tuned-gui
+process, because it wouldn't pass the pkexec getppid check. The check is
+there to ensure that the pkexec will not be owned by the init process.
+
+This fix runs the pkexec as a child process. The minor drawback is that
+there will be two tuned-gui processes - the original process running under
+the user and the pkexeced process running under the root. The original
+process will effectively do nothing, it will just wait for the pkexeced
+process to exit.
+
+Resolves: rhbz#1377896
+
+Signed-off-by: Jaroslav Škarvada <jskarvad@redhat.com>
+---
+ tuned-gui.desktop |  2 +-
+ tuned-gui.py      | 12 +++++++++---
+ 2 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/tuned-gui.desktop b/tuned-gui.desktop
+index f64869d..460e052 100644
+--- a/tuned-gui.desktop
++++ b/tuned-gui.desktop
+@@ -3,7 +3,7 @@ Encoding=UTF-8
+ Name=tuned-gui
+ GenericName=tuned-gui
+ Comment=GTK GUI that can control Tuned daemon and provides simple profile editor
+-Exec=pkexec /usr/sbin/tuned-gui
++Exec=tuned-gui
+ Icon=tuned
+ Terminal=false
+ Type=Application
+diff --git a/tuned-gui.py b/tuned-gui.py
+index 6cabfb5..3731b34 100755
+--- a/tuned-gui.py
++++ b/tuned-gui.py
+@@ -49,6 +49,7 @@
+ import time
+ import configobj
+ 
++import subprocess
+ import tuned.logs
+ import tuned.consts as consts
+ import tuned.version as version
+@@ -1017,9 +1018,14 @@ def _start_tuned(self):
+ 
+ 	if os.geteuid() != 0:
+ 		try:
+-			os.execvp('pkexec', ['pkexec ' + EXECNAME, EXECNAME] + sys.argv[1:])
+-		except (IOError, OSError) as e:
+-			pass
++			# Explicitly disabling shell to be safe
++			ec = subprocess.call(['pkexec', EXECNAME] + sys.argv[1:], shell = False)
++		except (subprocess.CalledProcessError) as e:
++			print >> sys.stderr, 'Error elevating privileges: %s' % e
++		else:
++			# If not pkexec error
++			if ec not in [126, 127]:
++				sys.exit(0)
+ 		# In case of error elevating privileges
+ 		print >> sys.stderr, 'Superuser permissions are required to run the daemon.'
+ 		sys.exit(1)

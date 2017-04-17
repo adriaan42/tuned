@@ -1,0 +1,10 @@
+usr/sbin/diskdevstat
+usr/sbin/netdevstat
+usr/sbin/scomes
+usr/sbin/varnetload
+usr/share/doc/tuned/README.scomes
+usr/share/doc/tuned/README.utils
+usr/share/man/man8/diskdevstat.*
+usr/share/man/man8/netdevstat.*
+usr/share/man/man8/scomes.*
+usr/share/man/man8/varnetload.*

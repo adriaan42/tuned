@@ -1,0 +1,19 @@
+From: Evgeni Golov <evgeni@debian.org>
+Subject: try to get unitdir and tmpdir from pkg-config
+Forwarded: https://github.com/redhat-performance/tuned/pull/34
+
+diff --git a/Makefile b/Makefile
+index d61aeda..d35e8d2 100644
+--- a/Makefile
++++ b/Makefile
+@@ -19,8 +19,8 @@ else
+ 	GIT_PSUFFIX = .$(GIT_SUFFIX)
+ 	RPM_VERSION = $(NAME)-$(VERSION)-1$(GIT_PSUFFIX)
+ endif
+-UNITDIR = $(shell rpm --eval '%{_unitdir}' 2>/dev/null || echo /usr/lib/systemd/system)
+-TMPFILESDIR = $(shell rpm --eval '%{_tmpfilesdir}' 2>/dev/null || echo /usr/lib/tmpfiles.d)
++UNITDIR = $(shell pkg-config systemd --variable systemdsystemunitdir || rpm --eval '%{_unitdir}' 2>/dev/null || echo /usr/lib/systemd/system)
++TMPFILESDIR = $(shell pkg-config systemd --variable tmpfilesdir || rpm --eval '%{_tmpfilesdir}' 2>/dev/null || echo /usr/lib/tmpfiles.d)
+ VERSIONED_NAME = $(NAME)-$(VERSION)$(GIT_PSUFFIX)
+ 
+ DATADIR = /usr/share

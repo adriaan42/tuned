@@ -1,0 +1,99 @@
+Source: tuned
+Section: admin
+Priority: optional
+Maintainer: Evgeni Golov <evgeni@debian.org>
+Uploaders: gustavo panizzo <gfa@zumbi.com.ar>
+Build-Depends: debhelper (>= 9),
+               desktop-file-utils,
+               dh-python,
+               dh-systemd,
+               ethtool,
+               hdparm,
+               pkg-config,
+               python-all,
+               python-configobj,
+               python-dbus,
+               python-decorator,
+               python-flexmock,
+               python-gi,
+               python-pyudev,
+               systemd
+Standards-Version: 3.9.8
+Homepage: https://github.com/redhat-performance/tuned
+Vcs-Git: https://anonscm.debian.org/collab-maint/tuned.git
+Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/tuned.git
+
+Package: tuned
+Architecture: all
+Depends: dbus,
+         ethtool,
+         gawk,
+         hdparm,
+         policykit-1 (>= 0.105-17~),
+         python-configobj,
+         python-dbus,
+         python-decorator,
+         python-gi,
+         python-pyudev,
+         virt-what,
+         ${misc:Depends},
+         ${python:Depends}
+Description: daemon for monitoring and adaptive tuning of system devices
+ The tuned package contains a daemon that tunes system settings dynamically.
+ It does so by monitoring the usage of several system components periodically.
+ Based on that information components will then be put into lower or higher
+ power saving modes to adapt to the current usage. Currently only ethernet
+ network and ATA harddisk devices are implemented.
+
+Package: tuned-gtk
+Architecture: all
+Depends: gir1.2-gtk-3.0,
+         powertop,
+         python-gi,
+         tuned (= ${binary:Version}),
+         ${misc:Depends},
+         ${python:Depends}
+Description: GTK+ GUI for tuned
+ The tuned package contains a daemon that tunes system settings dynamically.
+ It does so by monitoring the usage of several system components periodically.
+ Based on that information components will then be put into lower or higher
+ power saving modes to adapt to the current usage. Currently only ethernet
+ network and ATA harddisk devices are implemented.
+ .
+ This package contains the GTK+ GUI that can control tuned and provides simple
+ profile editor.
+
+Package: tuned-utils
+Architecture: all
+Depends: powertop,
+         tuned (= ${binary:Version}),
+         ${misc:Depends},
+         ${python:Depends}
+Description: various tuned utilities
+ The tuned package contains a daemon that tunes system settings dynamically.
+ It does so by monitoring the usage of several system components periodically.
+ Based on that information components will then be put into lower or higher
+ power saving modes to adapt to the current usage. Currently only ethernet
+ network and ATA harddisk devices are implemented.
+ .
+ This package contains utilities that can help you to fine tune and
+ debug your system and manage tuned profiles.
+
+Package: tuned-utils-systemtap
+Architecture: all
+Depends: systemtap,
+         tuned (= ${binary:Version}),
+         ${misc:Depends},
+         ${python:Depends}
+Description: disk and net statistic monitoring systemtap scripts
+ The tuned package contains a daemon that tunes system settings dynamically.
+ It does so by monitoring the usage of several system components periodically.
+ Based on that information components will then be put into lower or higher
+ power saving modes to adapt to the current usage. Currently only ethernet
+ network and ATA harddisk devices are implemented.
+ .
+ This package contains several systemtap scripts to allow detailed
+ manual monitoring of the system. Instead of the typical IO/sec it collects
+ minimal, maximal and average time between operations to be able to
+ identify applications that behave power inefficient (many small operations
+ instead of fewer large ones).

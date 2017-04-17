@@ -1,0 +1,6 @@
+usr/lib/python*/dist-packages/tuned/gtk
+usr/sbin/tuned-gui
+usr/share/applications/tuned-gui.desktop
+usr/share/icons/hicolor/scalable/apps/tuned.svg
+usr/share/polkit-1/actions/com.redhat.tuned.gui.policy
+usr/share/tuned/ui

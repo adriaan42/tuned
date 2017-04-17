@@ -1,0 +1,72 @@
+From: Evgeni Golov <evgeni@debian.org>
+Subject: install files to /usr/lib instead of libexec
+ Debian has no /usr/libexec
+Forwarded: no
+diff --git a/Makefile b/Makefile
+index d61aeda..d877111 100644
+--- a/Makefile
++++ b/Makefile
+@@ -159,7 +159,7 @@ install: install-dirs
+ 
+ 	# libexec scripts
+ 	$(foreach file, $(wildcard libexec/*), \
+-		install -Dpm 0755 $(file) $(DESTDIR)/usr/libexec/tuned/$(notdir $(file));)
++		install -Dpm 0755 $(file) $(DESTDIR)/usr/lib/tuned/$(notdir $(file));)
+ 
+ 	# icon
+ 	install -Dpm 0644 icons/tuned.svg $(DESTDIR)$(DATADIR)/icons/hicolor/scalable/apps/tuned.svg
+diff --git a/profiles/realtime-virtual-guest/script.sh b/profiles/realtime-virtual-guest/script.sh
+index 46855d2..e70ddb5 100755
+--- a/profiles/realtime-virtual-guest/script.sh
++++ b/profiles/realtime-virtual-guest/script.sh
+@@ -3,19 +3,19 @@
+ . /usr/lib/tuned/functions
+ 
+ start() {
+-    python /usr/libexec/tuned/defirqaffinity.py "remove" "$TUNED_isolated_cores_expanded" &&
++    python /usr/lib/tuned/defirqaffinity.py "remove" "$TUNED_isolated_cores_expanded" &&
+     tuna -c "$TUNED_isolated_cores_expanded" -i
+     return "$?"
+ }
+ 
+ stop() {
+     tuna -c "$TUNED_isolated_cores_expanded" -I &&
+-    python /usr/libexec/tuned/defirqaffinity.py "add" "$TUNED_isolated_cores_expanded"
++    python /usr/lib/tuned/defirqaffinity.py "add" "$TUNED_isolated_cores_expanded"
+     return "$?"
+ }
+ 
+ verify() {
+-    python /usr/libexec/tuned/defirqaffinity.py "verify" "$TUNED_isolated_cores_expanded"
++    python /usr/lib/tuned/defirqaffinity.py "verify" "$TUNED_isolated_cores_expanded"
+     return "$?"
+ }
+ 
+diff --git a/profiles/realtime-virtual-host/script.sh b/profiles/realtime-virtual-host/script.sh
+index 9c09ee3..384994f 100755
+--- a/profiles/realtime-virtual-host/script.sh
++++ b/profiles/realtime-virtual-host/script.sh
+@@ -19,7 +19,7 @@ create_modfile()
+ }
+ 
+ start() {
+-    python /usr/libexec/tuned/defirqaffinity.py "remove" "$TUNED_isolated_cores_expanded" &&
++    python /usr/lib/tuned/defirqaffinity.py "remove" "$TUNED_isolated_cores_expanded" &&
+     tuna -c "$TUNED_isolated_cores_expanded" -i
+     retval = "$?"
+ 
+@@ -65,12 +65,12 @@ start() {
+ stop() {
+     [ "$1" = "profile_switch" ] && rm -f $modfile
+     tuna -c "$TUNED_isolated_cores_expanded" -I &&
+-    python /usr/libexec/tuned/defirqaffinity.py "add" "$TUNED_isolated_cores_expanded"
++    python /usr/lib/tuned/defirqaffinity.py "add" "$TUNED_isolated_cores_expanded"
+     return "$?"
+ }
+ 
+ verify() {
+-    python /usr/libexec/tuned/defirqaffinity.py "verify" "$TUNED_isolated_cores_expanded"
++    python /usr/lib/tuned/defirqaffinity.py "verify" "$TUNED_isolated_cores_expanded"
+     retval = "$?"
+     if [ $retval -eq 0 -a -f /sys/module/kvm/parameters/kvmclock_periodic_sync ]; then
+         retval = `cat /sys/module/kvm/parameters/kvmclock_periodic_sync`
