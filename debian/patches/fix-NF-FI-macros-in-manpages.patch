@@ -1,9 +1,37 @@
-From: Evgeni Golov <evgeni@debian.org>
-Subject: fix NF/FI macros in manpages
 Forwarded: https://github.com/redhat-performance/tuned/pull/40
+From 1353a22ca2c10624404ec4edbe760a77cee22192 Mon Sep 17 00:00:00 2001
+From: Evgeni Golov <evgeni@debian.org>
+Date: Sat, 22 Apr 2017 10:12:03 +0200
+Subject: [PATCH] fix NF/FI macros in manpages
+
+the macros are called .nf and .fi, not .NF and .FI
+
+Test:
+    % LC_ALL=en_US.UTF-8 MANROFFSEQ='' MANWIDTH=80  man --warnings \
+      -E UTF-8 -l -Tutf8 -Z <file> >/dev/null
+    <standard input>:53: warning: macro `NF' not defined
+    <standard input>:74: warning: macro `FI' not defined
+
+Spotted by rpmlint and lintian.
+---
+ man/tuned-adm.8                       | 4 ++--
+ man/tuned-main.conf.5                 | 4 ++--
+ man/tuned-profiles-atomic.7           | 4 ++--
+ man/tuned-profiles-compat.7           | 4 ++--
+ man/tuned-profiles-cpu-partitioning.7 | 4 ++--
+ man/tuned-profiles-nfv-guest.7        | 4 ++--
+ man/tuned-profiles-nfv-host.7         | 4 ++--
+ man/tuned-profiles-oracle.7           | 4 ++--
+ man/tuned-profiles-realtime.7         | 4 ++--
+ man/tuned-profiles-sap-hana.7         | 4 ++--
+ man/tuned-profiles-sap.7              | 4 ++--
+ man/tuned-profiles.7                  | 4 ++--
+ man/tuned.8                           | 4 ++--
+ man/tuned.conf.5                      | 4 ++--
+ 14 files changed, 28 insertions(+), 28 deletions(-)
 
 diff --git a/man/tuned-adm.8 b/man/tuned-adm.8
-index 7757f35..f200d21 100644
+index 862cdf4..f239a30 100644
 --- a/man/tuned-adm.8
 +++ b/man/tuned-adm.8
 @@ -72,7 +72,7 @@ performance or balanced profile if unsure.
@@ -15,8 +43,8 @@ index 7757f35..f200d21 100644
  /etc/tuned/*
  /usr/lib/tuned/*
  
-@@ -88,7 +88,7 @@ Unload tunings.
- .BR tuned\-profiles\-nfv (7)
+@@ -89,7 +89,7 @@ Unload tunings.
+ .BR tuned\-profiles\-nfv\-guest (7)
  .BR tuned\-profiles\-compat (7)
  .SH AUTHOR
 -.NF
@@ -25,27 +53,29 @@ index 7757f35..f200d21 100644
  Jan Kaluža <jkaluza@redhat.com>
  Jan Včelák <jvcelak@redhat.com>
 diff --git a/man/tuned-main.conf.5 b/man/tuned-main.conf.5
-index c82ebfa..ae970cf 100644
+index 564e979..5a5f08b 100644
 --- a/man/tuned-main.conf.5
 +++ b/man/tuned-main.conf.5
-@@ -60,13 +60,13 @@ and will return one hardcoded profile (by default \fBbalanced\fR). It is only
- applicable if \fBdaemon\fR is enabled.
+@@ -79,7 +79,7 @@ in order defined by their priorities, i.e. unit with the lowest number is
+ processed as the first.
  
  .SH EXAMPLE
 -.NF
 +.nf
- no_daemon = 0
- dynamic_tuning = 1
- sleep_interval = 1
- update_interval = 10
- recommend_command = 0
+   no_daemon = 0
+   dynamic_tuning = 1
+   sleep_interval = 1
+@@ -87,7 +87,7 @@ processed as the first.
+   recommend_command = 0
+   reapply_sysctl = 1
+   default_instance_priority = 0
 -.FI
 +.fi
  
  .SH FILES
  .I /etc/tuned/tuned\-main.conf
 diff --git a/man/tuned-profiles-atomic.7 b/man/tuned-profiles-atomic.7
-index 0de9435..54e234f 100644
+index d525374..a658488 100644
 --- a/man/tuned-profiles-atomic.7
 +++ b/man/tuned-profiles-atomic.7
 @@ -42,7 +42,7 @@ profile. It additionally increases SELinux AVC cache, PID limit and tunes
@@ -57,15 +87,15 @@ index 0de9435..54e234f 100644
  .I /etc/tuned/*
  .I /usr/lib/tuned/*
  
-@@ -57,5 +57,5 @@ netfilter connections tracking.
- .BR tuned\-profiles\-nfv (7)
+@@ -59,5 +59,5 @@ netfilter connections tracking.
+ .BR tuned\-profiles\-cpu\-partitioning (7)
  .BR tuned\-profiles\-compat (7)
  .SH AUTHOR
 -.NF
 +.nf
  Jaroslav Škarvada <jskarvad@redhat.com>
 diff --git a/man/tuned-profiles-compat.7 b/man/tuned-profiles-compat.7
-index 599ad3a..fdf43d5 100644
+index 79562ac..da6dcbf 100644
 --- a/man/tuned-profiles-compat.7
 +++ b/man/tuned-profiles-compat.7
 @@ -75,7 +75,7 @@ disables disk barriers. Disk readahead values are increased. CPU governor is
@@ -77,20 +107,60 @@ index 599ad3a..fdf43d5 100644
  .I /etc/tuned/*
  .I /usr/lib/tuned/*
  
-@@ -90,7 +90,7 @@ set to performance.
- .BR tuned\-profiles\-realtime (7)
- .BR tuned\-profiles\-nfv (7)
+@@ -92,7 +92,7 @@ set to performance.
+ .BR tuned\-profiles\-nfv\-guest (7)
+ .BR tuned\-profiles\-cpu\-partitioning (7)
  .SH AUTHOR
 -.NF
 +.nf
  Jaroslav Škarvada <jskarvad@redhat.com>
  Jan Kaluža <jkaluza@redhat.com>
  Jan Včelák <jvcelak@redhat.com>
-diff --git a/man/tuned-profiles-nfv.7 b/man/tuned-profiles-nfv.7
-index 1fefe6d..5297594 100644
---- a/man/tuned-profiles-nfv.7
-+++ b/man/tuned-profiles-nfv.7
-@@ -37,7 +37,7 @@ Profile optimized for virtual guests based on realtime profile.
+diff --git a/man/tuned-profiles-cpu-partitioning.7 b/man/tuned-profiles-cpu-partitioning.7
+index cef66fd..29d34f2 100644
+--- a/man/tuned-profiles-cpu-partitioning.7
++++ b/man/tuned-profiles-cpu-partitioning.7
+@@ -33,7 +33,7 @@ The following profiles is provided:
+ Profile optimized for CPU partitioning.
+ 
+ .SH "FILES"
+-.NF
++.nf
+ .I /etc/tuned/*
+ .I /usr/lib/tuned/*
+ 
+@@ -50,5 +50,5 @@ Profile optimized for CPU partitioning.
+ .BR tuned\-profiles\-nfv\-guest (7)
+ .BR tuned\-profiles\-compat (7)
+ .SH AUTHOR
+-.NF
++.nf
+ Jaroslav Škarvada <jskarvad@redhat.com>
+diff --git a/man/tuned-profiles-nfv-guest.7 b/man/tuned-profiles-nfv-guest.7
+index 7b6b465..eae25f2 100644
+--- a/man/tuned-profiles-nfv-guest.7
++++ b/man/tuned-profiles-nfv-guest.7
+@@ -33,7 +33,7 @@ The following profile is provided:
+ Profile optimized for virtual guests based on realtime profile.
+ 
+ .SH "FILES"
+-.NF
++.nf
+ .I /etc/tuned/*
+ .I /usr/lib/tuned/*
+ 
+@@ -50,5 +50,5 @@ Profile optimized for virtual guests based on realtime profile.
+ .BR tuned\-profiles\-cpu\-partitioning (7)
+ .BR tuned\-profiles\-compat (7)
+ .SH AUTHOR
+-.NF
++.nf
+ Jaroslav Škarvada <jskarvad@redhat.com>
+diff --git a/man/tuned-profiles-nfv-host.7 b/man/tuned-profiles-nfv-host.7
+index 820177e..63f8c96 100644
+--- a/man/tuned-profiles-nfv-host.7
++++ b/man/tuned-profiles-nfv-host.7
+@@ -33,7 +33,7 @@ The following profile is provided:
  Profile optimized for virtual hosts based on realtime profile.
  
  .SH "FILES"
@@ -99,15 +169,15 @@ index 1fefe6d..5297594 100644
  .I /etc/tuned/*
  .I /usr/lib/tuned/*
  
-@@ -52,5 +52,5 @@ Profile optimized for virtual hosts based on realtime profile.
- .BR tuned\-profiles\-realtime (7)
+@@ -50,5 +50,5 @@ Profile optimized for virtual hosts based on realtime profile.
+ .BR tuned\-profiles\-cpu\-partitioning (7)
  .BR tuned\-profiles\-compat (7)
  .SH AUTHOR
 -.NF
 +.nf
  Jaroslav Škarvada <jskarvad@redhat.com>
 diff --git a/man/tuned-profiles-oracle.7 b/man/tuned-profiles-oracle.7
-index d40ee3b..3f5b33d 100644
+index e465543..6fffb56 100644
 --- a/man/tuned-profiles-oracle.7
 +++ b/man/tuned-profiles-oracle.7
 @@ -35,7 +35,7 @@ It additionaly disables transparent huge pages and modifies some other
@@ -119,15 +189,15 @@ index d40ee3b..3f5b33d 100644
  .I /etc/tuned/*
  .I /usr/lib/tuned/*
  
-@@ -50,5 +50,5 @@ performance related kernel parameters.
- .BR tuned\-profiles\-nfv (7)
+@@ -52,5 +52,5 @@ performance related kernel parameters.
+ .BR tuned\-profiles\-cpu\-partitioning (7)
  .BR tuned\-profiles\-compat (7)
  .SH AUTHOR
 -.NF
 +.nf
  Jaroslav Škarvada <jskarvad@redhat.com>
 diff --git a/man/tuned-profiles-realtime.7 b/man/tuned-profiles-realtime.7
-index 0d4c469..b649915 100644
+index 47e9a8f..d866f79 100644
 --- a/man/tuned-profiles-realtime.7
 +++ b/man/tuned-profiles-realtime.7
 @@ -33,7 +33,7 @@ The following profiles are provided:
@@ -139,15 +209,15 @@ index 0d4c469..b649915 100644
  .I /etc/tuned/*
  .I /usr/lib/tuned/*
  
-@@ -48,5 +48,5 @@ Profile optimized for realtime.
- .BR tuned\-profiles\-nfv (7)
+@@ -50,5 +50,5 @@ Profile optimized for realtime.
+ .BR tuned\-profiles\-cpu\-partitioning (7)
  .BR tuned\-profiles\-compat (7)
  .SH AUTHOR
 -.NF
 +.nf
  Jaroslav Škarvada <jskarvad@redhat.com>
 diff --git a/man/tuned-profiles-sap-hana.7 b/man/tuned-profiles-sap-hana.7
-index b6cfb93..cb60aee 100644
+index c8e3688..1c3bf75 100644
 --- a/man/tuned-profiles-sap-hana.7
 +++ b/man/tuned-profiles-sap-hana.7
 @@ -44,7 +44,7 @@ regarding semaphores. It decreases virtual memory swappiness and disables large
@@ -159,15 +229,15 @@ index b6cfb93..cb60aee 100644
  .I /etc/tuned/*
  .I /usr/lib/tuned/*
  
-@@ -59,5 +59,5 @@ recieve offload for the network adapter.
- .BR tuned\-profiles\-nfv (7)
+@@ -61,5 +61,5 @@ recieve offload for the network adapter.
+ .BR tuned\-profiles\-cpu-partitioning (7)
  .BR tuned\-profiles\-compat (7)
  .SH AUTHOR
 -.NF
 +.nf
  Jaroslav Škarvada <jskarvad@redhat.com>
 diff --git a/man/tuned-profiles-sap.7 b/man/tuned-profiles-sap.7
-index 8da8a36..a54434b 100644
+index bde8d5c..2672539 100644
 --- a/man/tuned-profiles-sap.7
 +++ b/man/tuned-profiles-sap.7
 @@ -36,7 +36,7 @@ settings regarding shared memory, semaphores and maximum number of memory map
@@ -179,15 +249,15 @@ index 8da8a36..a54434b 100644
  .I /etc/tuned/*
  .I /usr/lib/tuned/*
  
-@@ -51,5 +51,5 @@ areas a process may have.
- .BR tuned\-profiles\-nfv (7)
+@@ -53,5 +53,5 @@ areas a process may have.
+ .BR tuned\-profiles\-cpu\-partitioning (7)
  .BR tuned\-profiles\-compat (7)
  .SH AUTHOR
 -.NF
 +.nf
  Jaroslav Škarvada <jskarvad@redhat.com>
 diff --git a/man/tuned-profiles.7 b/man/tuned-profiles.7
-index f211763..125e105 100644
+index 5ca78ad..483d3e8 100644
 --- a/man/tuned-profiles.7
 +++ b/man/tuned-profiles.7
 @@ -112,7 +112,7 @@ Profile optimized for virtual hosts based on throughput\-performance profile.
@@ -199,8 +269,8 @@ index f211763..125e105 100644
  .I /etc/tuned/*
  .I /usr/lib/tuned/*
  
-@@ -127,7 +127,7 @@ It additionally enables more aggresive writeback of dirty pages.
- .BR tuned\-profiles\-nfv (7)
+@@ -129,7 +129,7 @@ It additionally enables more aggresive writeback of dirty pages.
+ .BR tuned\-profiles\-cpu\-partitioning (7)
  .BR tuned\-profiles\-compat (7)
  .SH AUTHOR
 -.NF
@@ -209,7 +279,7 @@ index f211763..125e105 100644
  Jan Kaluža <jkaluza@redhat.com>
  Jan Včelák <jvcelak@redhat.com>
 diff --git a/man/tuned.8 b/man/tuned.8
-index 0fe6cd7..0337f9e 100644
+index 7293679..4636206 100644
 --- a/man/tuned.8
 +++ b/man/tuned.8
 @@ -60,7 +60,7 @@ This is intended for debugging purposes.
@@ -231,7 +301,7 @@ index 0fe6cd7..0337f9e 100644
  Jan Včelák <jvcelak@redhat.com>
  Jaroslav Škarvada <jskarvad@redhat.com>
 diff --git a/man/tuned.conf.5 b/man/tuned.conf.5
-index 84cbb22..c896a73 100644
+index 058a657..6a33646 100644
 --- a/man/tuned.conf.5
 +++ b/man/tuned.conf.5
 @@ -50,7 +50,7 @@ last replaces all options defined by the previosly defined plugin.
