@@ -25,14 +25,18 @@ class DiskPlugin(hotplug.Plugin):
 		self._cmd = commands()
 
 	def _init_devices(self):
-		self._devices = set()
+		self._devices_supported = True
+		self._free_devices = set()
 		for device in self._hardware_inventory.get_devices("block"):
 			if self._device_is_supported(device):
-				self._devices.add(device.sys_name)
+				self._free_devices.add(device.sys_name)
 
 		self._assigned_devices = set()
-		self._free_devices = self._devices.copy()
 
+	def _get_device_objects(self, devices):
+		return map(lambda x: self._hardware_inventory.get_device("block", x), devices)
+
+	@classmethod
 	def _device_is_supported(cls, device):
 		return  device.device_type == "disk" and \
 			device.attributes.get("removable", None) == "0" and \
@@ -90,6 +94,7 @@ class DiskPlugin(hotplug.Plugin):
 			instance._device_idle = {}
 			instance._stats = {}
 			instance._idle = {}
+			instance._spindown_change_delayed = {}
 		else:
 			instance._has_dynamic_tuning = False
 			instance._load_monitor = None
@@ -110,7 +115,7 @@ class DiskPlugin(hotplug.Plugin):
 			return
 		if rc == 0:
 			cnt = 0
-		elif rc == errno.ENOENT:
+		elif rc == -errno.ENOENT:
 			self._spindown_errcnt = self._apm_errcnt = consts.ERROR_THRESHOLD + 1
 			log.warn("hdparm command not found, ignoring future set_apm / set_spindown commands")
 			return
@@ -122,6 +127,16 @@ class DiskPlugin(hotplug.Plugin):
 			self._spindown_errcnt = cnt
 		else:
 			self._apm_errcnt = cnt
+
+	def _change_spindown(self, instance, device, new_spindown_level):
+		log.debug("changing spindown to %d" % new_spindown_level)
+		(rc, out) = self._cmd.execute(["hdparm", "-S%d" % new_spindown_level, "/dev/%s" % device], no_errors = [errno.ENOENT])
+		self._update_errcnt(rc, True)
+		instance._spindown_change_delayed[device] = False
+
+	def _drive_spinning(self, device):
+		(rc, out) = self._cmd.execute(["hdparm", "-C", "/dev/%s" % device], no_errors = [errno.ENOENT])
+		return not "standby" in out and not "sleeping" in out
 
 	def _instance_update_dynamic(self, instance, device):
 		load = instance._load_monitor.get_device_load(device)
@@ -155,13 +170,17 @@ class DiskPlugin(hotplug.Plugin):
 
 			log.debug("tuning level changed to %d" % idle["level"])
 			if self._spindown_errcnt < consts.ERROR_THRESHOLD:
-				log.debug("changing spindown to %d" % new_spindown_level)
-				(rc, out) = self._cmd.execute(["hdparm", "-S%d" % new_spindown_level, "/dev/%s" % device], no_errors = [errno.ENOENT])
-				self._update_errcnt(rc, True)
+				if not self._drive_spinning(device) and level_change > 0:
+					log.debug("delaying spindown change to %d, drive has already spun down" % new_spindown_level)
+					instance._spindown_change_delayed[device] = True
+				else:
+					self._change_spindown(instance, device, new_spindown_level)
 			if self._apm_errcnt < consts.ERROR_THRESHOLD:
 				log.debug("changing APM_level to %d" % new_power_level)
 				(rc, out) = self._cmd.execute(["hdparm", "-B%d" % new_power_level, "/dev/%s" % device], no_errors = [errno.ENOENT])
 				self._update_errcnt(rc, False)
+		elif instance._spindown_change_delayed[device] and self._drive_spinning(device):
+			self._change_spindown(instance, device, new_spindown_level)
 
 		log.debug("%s load: read %0.2f, write %0.2f" % (device, stats["read"], stats["write"]))
 		log.debug("%s idle: read %d, write %d, level %d" % (device, idle["read"], idle["write"], idle["level"]))
@@ -169,6 +188,7 @@ class DiskPlugin(hotplug.Plugin):
 	def _init_stats_and_idle(self, instance, device):
 		instance._stats[device] = { "new": 11 * [0], "old": 11 * [0], "max": 11 * [1] }
 		instance._idle[device] = { "level": 0, "read": 0, "write": 0 }
+		instance._spindown_change_delayed[device] = False
 
 	def _update_stats(self, instance, device, new_load):
 		instance._stats[device]["old"] = old_load = instance._stats[device]["new"]
@@ -237,7 +257,7 @@ class DiskPlugin(hotplug.Plugin):
 		value = None
 		err = False
 		(rc, out) = self._cmd.execute(["hdparm", "-B", "/dev/" + device], no_errors = [errno.ENOENT])
-		if rc == errno.ENOENT:
+		if rc == -errno.ENOENT:
 			return None
 		elif rc != 0:
 			err = True
@@ -295,7 +315,7 @@ class DiskPlugin(hotplug.Plugin):
 		return int(value)
 
 	@command_custom("readahead_multiply", per_device=True)
-	def _multiply_readahead(self, enabling, multiplier, device, verify):
+	def _multiply_readahead(self, enabling, multiplier, device, verify, ignore_missing):
 		if verify:
 			return None
 		storage_key = self._storage_key("readahead_multiply", device)
@@ -305,12 +325,12 @@ class DiskPlugin(hotplug.Plugin):
 				return
 			new_readahead = int(float(multiplier) * old_readahead)
 			self._storage.set(storage_key, old_readahead)
-			self._set_readahead(new_readahead, device)
+			self._set_readahead(new_readahead, device, False)
 		else:
 			old_readahead = self._storage.get(storage_key)
 			if old_readahead is None:
 				return
-			self._set_readahead(old_readahead, device)
+			self._set_readahead(old_readahead, device, False)
 			self._storage.unset(storage_key)
 
 	def _scheduler_quantum_file(self, device):

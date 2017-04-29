@@ -9,7 +9,7 @@ import re
 
 log = tuned.logs.get()
 
-class DiskPlugin(hotplug.Plugin):
+class SCSIHostPlugin(hotplug.Plugin):
 	"""
 	Plugin for tuning options of SCSI hosts.
 	"""
@@ -20,14 +20,18 @@ class DiskPlugin(hotplug.Plugin):
 		self._cmd = commands()
 
 	def _init_devices(self):
-		self._devices = set()
+		self._devices_supported = True
+		self._free_devices = set()
 		for device in self._hardware_inventory.get_devices("scsi"):
 			if self._device_is_supported(device):
-				self._devices.add(device.sys_name)
+				self._free_devices.add(device.sys_name)
 
 		self._assigned_devices = set()
-		self._free_devices = self._devices.copy()
 
+	def _get_device_objects(self, devices):
+		return map(lambda x: self._hardware_inventory.get_device("scsi", x), devices)
+
+	@classmethod
 	def _device_is_supported(cls, device):
 		return  device.device_type == "scsi_host"
 
@@ -72,12 +76,12 @@ class DiskPlugin(hotplug.Plugin):
 			if os.path.exists(policy_file):
 				self._cmd.write_to_file(policy_file, policy)
 			else:
-				log.warn("ALPM control file ('%s') not found, skipping ALPM setting for '%s'" % (policy_file, str(device)))
+				log.info("ALPM control file ('%s') not found, skipping ALPM setting for '%s'" % (policy_file, str(device)))
 				return None
 		return policy
 
 	@command_get("alpm")
 	def _get_alpm(self, device):
 		policy_file = self._get_alpm_policy_file(device)
-		policy = self._cmd.read_file(policy_file).strip()
+		policy = self._cmd.read_file(policy_file, no_error = True).strip()
 		return policy if policy != "" else None

@@ -35,10 +35,12 @@ class Admin(object):
 		print(message, file=sys.stderr)
 
 	def _signal_profile_changed_cb(self, profile_name, result, errstr):
-		self._daemon_action_profile = profile_name
-		self._daemon_action_result = result
-		self._daemon_action_errstr = errstr
-		self._daemon_action_finished.set()
+		# ignore successive signals if the signal is not yet processed
+		if not self._daemon_action_finished.is_set():
+			self._daemon_action_profile = profile_name
+			self._daemon_action_result = result
+			self._daemon_action_errstr = errstr
+			self._daemon_action_finished.set()
 
 	def _tuned_is_running(self):
 		try:
@@ -115,7 +117,7 @@ class Admin(object):
 			profile_name = None
 		return profile_name
 
-	def _print_profile_info(self, profile_info):
+	def _print_profile_info(self, profile, profile_info):
 		if profile_info[0] == True:
 			print("Profile name:")
 			print(profile_info[1])
@@ -133,12 +135,12 @@ class Admin(object):
 	def _action_dbus_profile_info(self, profile = ""):
 		if profile == "":
 			profile = self._dbus_get_active_profile()
-		return self._controller.exit(self._print_profile_info(self._controller.profile_info(profile)))
+		return self._controller.exit(self._print_profile_info(profile, self._controller.profile_info(profile)))
 
 	def _action_profile_info(self, profile = ""):
 		if profile == "":
 			profile = self._get_active_profile()
-		return self._print_profile_info(self._profiles_locator.get_profile_attrs(profile, [consts.PROFILE_ATTR_SUMMARY, consts.PROFILE_ATTR_DESCRIPTION], ["", ""]))
+		return self._print_profile_info(profile, self._profiles_locator.get_profile_attrs(profile, [consts.PROFILE_ATTR_SUMMARY, consts.PROFILE_ATTR_DESCRIPTION], ["", ""]))
 
 	def _print_profile_name(self, profile_name):
 		if profile_name is None:
@@ -186,7 +188,7 @@ class Admin(object):
 			return False
 		self._daemon_action_finished.clear()
 		(ret, msg) = self._controller.switch_profile(profile_name)
-		if self._async:
+		if self._async or not ret:
 			return self._controller.exit(self._profile_print_status(ret, msg))
 		else:
 			self._timestamp = time.time()
@@ -212,7 +214,6 @@ class Admin(object):
 		else:
 			self._error("Requested profile '%s' doesn't exist." % profile_name)
 			return False
-		return self._profile_print_status(self, ret, msg)
 
 	def _action_dbus_recommend_profile(self):
 		print(self._controller.recommend_profile())

@@ -10,11 +10,15 @@ DBUS_OBJECT = "/Tuned"
 DEFAULT_PROFILE = "balanced"
 DEFAULT_STORAGE_FILE = "/run/tuned/save.pickle"
 LOAD_DIRECTORIES = ["/usr/lib/tuned", "/etc/tuned"]
+PERSISTENT_STORAGE_DIR = "/var/lib/tuned"
+PLUGIN_MAIN_UNIT_NAME = "main"
 
+TMP_FILE_SUFFIX = ".tmp"
 # max. number of consecutive errors to give up
 ERROR_THRESHOLD = 3
 
 # bootloader plugin configuration
+BOOT_DIR = "/boot"
 GRUB2_CFG_FILES = ["/boot/grub2/grub.cfg", "/boot/efi/EFI/redhat/grub.cfg", "/boot/efi/EFI/fedora/grub.cfg"]
 GRUB2_CFG_DIR = "/etc/grub.d"
 GRUB2_TUNED_TEMPLATE_NAME = "00_tuned"
@@ -22,12 +26,19 @@ GRUB2_TUNED_TEMPLATE_PATH = GRUB2_CFG_DIR + "/" + GRUB2_TUNED_TEMPLATE_NAME
 GRUB2_TEMPLATE_HEADER_BEGIN = "### BEGIN /etc/grub.d/" + GRUB2_TUNED_TEMPLATE_NAME +  " ###"
 GRUB2_TEMPLATE_HEADER_END = "### END /etc/grub.d/" + GRUB2_TUNED_TEMPLATE_NAME +  " ###"
 GRUB2_TUNED_VAR = "tuned_params"
+GRUB2_TUNED_INITRD_VAR = "tuned_initrd"
 GRUB2_DEFAULT_ENV_FILE = "/etc/default/grub"
+INITRD_IMAGE_DIR = "/boot"
 BOOT_CMDLINE_TUNED_VAR = "TUNED_BOOT_CMDLINE"
+BOOT_CMDLINE_INITRD_ADD_VAR = "TUNED_BOOT_INITRD_ADD"
 BOOT_CMDLINE_FILE = "/etc/tuned/bootcmdline"
 
 # modules plugin configuration
 MODULES_FILE = "/etc/modprobe.d/tuned.conf"
+
+# systemd plugin configuration
+SYSTEMD_SYSTEM_CONF_FILE = "/etc/systemd/system.conf"
+SYSTEMD_CPUAFFINITY_VAR = "CPUAffinity"
 
 # number of backups
 LOG_FILE_COUNT = 2
@@ -50,6 +61,7 @@ CFG_SLEEP_INTERVAL = "sleep_interval"
 CFG_UPDATE_INTERVAL = "update_interval"
 CFG_RECOMMEND_COMMAND = "recommend_command"
 CFG_REAPPLY_SYSCTL = "reapply_sysctl"
+CFG_DEFAULT_INSTANCE_PRIORITY = "default_instance_priority"
 
 # no_daemon mode
 CFG_DEF_DAEMON = True
@@ -63,6 +75,8 @@ CFG_DEF_UPDATE_INTERVAL = 10
 CFG_DEF_RECOMMEND_COMMAND = True
 # reapply system sysctl
 CFG_DEF_REAPPLY_SYSCTL = True
+# default instance priority
+CFG_DEF_DEFAULT_INSTANCE_PRIORITY = 0
 
 PATH_CPU_DMA_LATENCY = "/dev/cpu_dma_latency"
 

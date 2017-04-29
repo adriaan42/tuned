@@ -4,7 +4,7 @@ import tuned.logs
 import functions.functions as functions
 import tuned.consts as consts
 from tuned.utils.commands import commands
-from configobj import ConfigObj
+from configobj import ConfigObj, ConfigObjError
 
 log = tuned.logs.get()
 
@@ -59,10 +59,10 @@ class Variables():
 			else:
 				self.add_variable(item, config[item])
 
-	def add_from_cfg(self, cfg, dir_name):
+	def add_from_cfg(self, cfg):
 		for item in cfg:
 			if str(item) == "include":
-				self.add_from_file(os.path.normpath(os.path.join(dir_name, cfg[item])))
+				self.add_from_file(os.path.normpath(cfg[item]))
 			else:
 				self.add_variable(item, cfg[item])
 

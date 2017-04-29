@@ -33,7 +33,7 @@ import tuned.consts as consts
 import tuned.logs
 import tuned.plugins.repository as repository
 import configobj as ConfigObj
-import tuned.exceptions as TunedException
+from tuned.exceptions import TunedException
 
 from tuned import plugins
 from tuned.utils.plugin_loader import PluginLoader
@@ -42,7 +42,7 @@ from tuned import storage, units, monitors, plugins, profiles, exports, \
 
 import tuned.plugins as Plugins
 
-__all__ = ['GTKPluginLoader']
+__all__ = ['GuiPluginLoader']
 
 global_config_spec = ['dynamic_tuning = boolean(default=%s)'
                       % consts.CFG_DEF_DYNAMIC_TUNING,
@@ -71,6 +71,7 @@ class GuiPluginLoader(PluginLoader):
         monitors_repository = monitors.Repository()
         hardware_inventory = hardware.Inventory()
         device_matcher = hardware.DeviceMatcher()
+        device_matcher_udev = hardware.DeviceMatcherUdev()
         plugin_instance_factory = plugins.instance.Factory()
 
         self.repo = repository.Repository(
@@ -78,6 +79,7 @@ class GuiPluginLoader(PluginLoader):
             storage_factory,
             hardware_inventory,
             device_matcher,
+            device_matcher_udev,
             plugin_instance_factory,
             None,
             None

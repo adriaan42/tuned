@@ -49,9 +49,9 @@ class MountsPlugin(base.Plugin):
 
 	def _init_devices(self):
 		self._generate_mountpoint_topology()
-		self._devices = set(self._mountpoint_topology.keys())
+		self._devices_supported = True
+		self._free_devices = set(self._mountpoint_topology.keys())
 		self._assigned_devices = set()
-		self._free_devices = self._devices.copy()
 
 	@classmethod
 	def _get_config_options(self):
@@ -121,7 +121,7 @@ class MountsPlugin(base.Plugin):
 		cmd.execute(remount_command)
 
 	@command_custom("disable_barriers", per_device=True)
-	def _disable_barriers(self, start, value, mountpoint, verify):
+	def _disable_barriers(self, start, value, mountpoint, verify, ignore_missing):
 		storage_key = self._storage_key("disable_barriers", mountpoint)
 		force = str(value).lower() == "force"
 		value = force or self._option_bool(value)

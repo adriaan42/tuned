@@ -22,16 +22,19 @@ class NetTuningPlugin(base.Plugin):
 		self._cmd = commands()
 
 	def _init_devices(self):
-		self._devices = set()
+		self._devices_supported = True
+		self._free_devices = set()
 		self._assigned_devices = set()
 
 		re_not_virtual = re.compile('(?!.*/virtual/.*)')
 		for device in self._hardware_inventory.get_devices("net"):
 			if re_not_virtual.match(device.device_path):
-				self._devices.add(device.sys_name)
+				self._free_devices.add(device.sys_name)
 
-		self._free_devices = self._devices.copy()
-		log.debug("devices: %s" % str(self._devices));
+		log.debug("devices: %s" % str(self._free_devices));
+
+	def _get_device_objects(self, devices):
+		return map(lambda x: self._hardware_inventory.get_device("net", x), devices)
 
 	def _instance_init(self, instance):
 		instance._has_static_tuning = True
@@ -266,7 +269,7 @@ class NetTuningPlugin(base.Plugin):
 		if not sim:
 			log.debug("setting %s: %s" % ("coalesce" if coalesce else "features", str(d)))
 			# ignore ethtool return code 80, it means parameter is already set
-			self._cmd.execute(["ethtool", "-C" if coalesce else "-K", device] + self._cmd.dict2list(d), [80])
+			self._cmd.execute(["ethtool", "-C" if coalesce else "-K", device] + self._cmd.dict2list(d), no_errors = [80])
 		return d
 
 	def _custom_parameters(self, coalesce, start, value, device, verify):
@@ -290,9 +293,9 @@ class NetTuningPlugin(base.Plugin):
 		return None
 
 	@command_custom("features", per_device = True)
-	def _features(self, start, value, device, verify):
+	def _features(self, start, value, device, verify, ignore_missing):
 		return self._custom_parameters(False, start, value, device, verify)
 
 	@command_custom("coalesce", per_device = True)
-	def _coalesce(self, start, value, device, verify):
+	def _coalesce(self, start, value, device, verify, ignore_missing):
 		return self._custom_parameters(True, start, value, device, verify)

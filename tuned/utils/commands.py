@@ -2,6 +2,7 @@ import errno
 import tuned.logs
 import copy
 import os
+import shutil
 import tuned.consts as consts
 from configobj import ConfigObj, ConfigObjError
 import re
@@ -33,6 +34,14 @@ class commands:
 	def unquote(self, v):
 		return re.sub("^\"(.*)\"$", r"\1", v)
 
+	# escape escape character (by default '\')
+	def escape(self, s, what_escape = "\\", escape_by = "\\"):
+		return s.replace(what_escape, "%s%s" % (escape_by, what_escape))
+
+	# clear escape characters (by default '\')
+	def unescape(self, s, escape_char = "\\"):
+		return s.replace(escape_char, "")
+
 	# add spaces to align s2 to pos, returns resulting string: s1 + spaces + s2
 	def align_str(self, s1, pos, s2):
 		return s1 + " " * (pos - len(s1)) + s2
@@ -56,12 +65,16 @@ class commands:
 	# Do multiple regex replaces in 's' according to lookup table described by
 	# dictionary 'd', e.g.: d = {"re1": "replace1", "re2": "replace2", ...}
 	# r can be regex precompiled by re_lookup_compile for speedup
-	def multiple_re_replace(self, d, s, r = None):
-		if len(d) == 0 or s is None:
-			return s
+	def multiple_re_replace(self, d, s, r = None, flags = 0):
+		if d is None:
+			if r is None:
+				return s
+		else:
+			if len(d) == 0 or s is None:
+				return s
 		if r is None:
 			r = self.re_lookup_compile(d)
-		return r.sub(lambda mo: d.values()[mo.lastindex - 1], s)
+		return r.sub(lambda mo: d.values()[mo.lastindex - 1], s, flags)
 
 	# Do regex lookup on 's' according to lookup table described by
 	# dictionary 'd' and return corresponding value from the dictionary,
@@ -77,16 +90,23 @@ class commands:
 			return d.values()[mo.lastindex - 1]
 		return None
 
-	def write_to_file(self, f, data):
-		self._debug("Writing to file: %s < %s" % (f, data))
+	def write_to_file(self, f, data, makedir = False, no_error = False):
+		self._debug("Writing to file: '%s' < '%s'" % (f, data))
+		if makedir:
+			d = os.path.dirname(f)
+			if os.path.isdir(d):
+				makedir = False
 		try:
+			if makedir:
+				os.makedirs(d)
 			fd = open(f, "w")
 			fd.write(str(data))
 			fd.close()
 			rc = True
 		except (OSError,IOError) as e:
 			rc = False
-			self._error("Writing to file %s error: %s" % (f, e))
+			if not no_error:
+				self._error("Writing to file '%s' error: '%s'" % (f, e))
 		return rc
 
 	def read_file(self, f, err_ret = "", no_error = False):
@@ -97,8 +117,49 @@ class commands:
 			f.close()
 		except (OSError,IOError) as e:
 			if not no_error:
-				self._error("Reading %s error: %s" % (f, e))
+				self._error("Error when reading file '%s': '%s'" % (f, e))
+		self._debug("Read data from file: '%s' > '%s'" % (f, old_value))
 		return old_value
+
+	def rmtree(self, f, no_error = False):
+		self._debug("Removing tree: '%s'" % f)
+		if os.path.exists(f):
+			try:
+				shutil.rmtree(f, no_error)
+			except OSError as error:
+				if not no_error:
+					log.error("cannot remove tree '%s': '%s'" % (f, str(error)))
+				return False
+		return True
+
+	def unlink(self, f, no_error = False):
+		self._debug("Removing file: '%s'" % f)
+		if os.path.exists(f):
+			try:
+				os.unlink(f)
+			except OSError as error:
+				if not no_error:
+					log.error("cannot remove file '%s': '%s'" % (f, str(error)))
+				return False
+		return True
+
+	def rename(self, src, dst, no_error = False):
+		self._debug("Renaming file '%s' to '%s'" % (src, dst))
+		try:
+			os.rename(src, dst)
+		except OSError as error:
+			if not no_error:
+				log.error("cannot rename file '%s' to '%s': '%s'" % (src, dst, str(error)))
+			return False
+		return True
+
+	def copy(self, src, dst, no_error = False):
+		try:
+			log.debug("copying file '%s' to '%s'" % (src, dst))
+			shutil.copy(src, dst)
+		except IOError as e:
+			if not no_error:
+				log.error("cannot copy file '%s' to '%s': %s" % (src, dst, e))
 
 	def replace_in_file(self, f, pattern, repl):
 		data = self.read_file(f)
@@ -106,8 +167,37 @@ class commands:
 			return False;
 		return self.write_to_file(f, re.sub(pattern, repl, data, flags = re.MULTILINE))
 
-	# "no_errors" can be list of return codes not treated as errors
-	def execute(self, args, no_errors = []):
+	# do multiple replaces in file 'f' by using dictionary 'd',
+	# e.g.: d = {"re1": val1, "re2": val2, ...}
+	def multiple_replace_in_file(self, f, d):
+		data = self.read_file(f)
+		if len(data) <= 0:
+			return False;
+		return self.write_to_file(f, self.multiple_re_replace(d, data, flags = re.MULTILINE))
+
+	# makes sure that options from 'd' are set to values from 'd' in file 'f',
+	# when needed it edits options or add new options if they don't
+	# exist and 'add' is set to True, 'd' has the following form:
+	# d = {"option_1": value_1, "option_2": value_2, ...}
+	def add_modify_option_in_file(self, f, d, add = True):
+		data = self.read_file(f)
+		for opt in d:
+			o = str(opt)
+			v = str(d[opt])
+			if re.search(r"\b" + o + r"\s*=.*$", data, flags = re.MULTILINE) is None:
+				if add:
+					if len(data) > 0 and data[-1] != "\n":
+						data += "\n"
+					data += "%s=\"%s\"\n" % (o, v)
+			else:
+				data = re.sub(r"\b(" + o + r"\s*=).*$", r"\1" + "\"" + v + "\"", data, flags = re.MULTILINE)
+
+		return self.write_to_file(f, data)
+
+	# "no_errors" can be list of return codes not treated as errors, if 0 is in no_errors, it means any error
+	# returns (retcode, out), where retcode is exit code of the executed process or -errno if
+	# OSError or IOError exception happened
+	def execute(self, args, shell = False, cwd = None, no_errors = []):
 		retcode = 0
 		if self._environment is None:
 			self._environment = os.environ.copy()
@@ -116,18 +206,18 @@ class commands:
 		self._debug("Executing %s." % str(args))
 		out = ""
 		try:
-			proc = Popen(args, stdout=PIPE, stderr=PIPE, env=self._environment, close_fds=True)
+			proc = Popen(args, stdout = PIPE, stderr = PIPE, env = self._environment, shell = shell, cwd = cwd, close_fds = True)
 			out, err = proc.communicate()
 
 			retcode = proc.returncode
-			if retcode and not retcode in no_errors:
+			if retcode and not retcode in no_errors and not 0 in no_errors:
 				err_out = err[:-1]
 				if len(err_out) == 0:
 					err_out = out[:-1]
 				self._error("Executing %s error: %s" % (args[0], err_out))
 		except (OSError, IOError) as e:
-			retcode = e.errno if e.errno is not None else -1
-			if not retcode in no_errors:
+			retcode = -e.errno if e.errno is not None else -1
+			if not abs(retcode) in no_errors and not 0 in no_errors:
 				self._error("Executing %s error: %s" % (args[0], e))
 		return retcode, out
 
@@ -175,26 +265,30 @@ class commands:
 		rl = []
 		if l is None:
 			return l
-		ll = str(l).split(",")
+		if type(l) is list:
+			ll = l
+		else:
+			ll = str(l).split(",")
 		ll2 = []
 		hexmask = False
 		hv = ""
 		# Remove commas from hexmasks
 		for v in ll:
+			sv = str(v)
 			if hexmask:
-				if len(v) == 0:
+				if len(sv) == 0:
 					hexmask = False
 					ll2.append(hv)
 					hv = ""
 				else:
-					hv += v
+					hv += sv
 			else:
-				if v[0:2].lower() == "0x":
+				if sv[0:2].lower() == "0x":
 					hexmask = True
-					hv = v
+					hv = sv
 				else:
-					if len(v) > 0:
-						ll2.append(v)
+					if len(sv) > 0:
+						ll2.append(sv)
 		if len(hv) > 0:
 			ll2.append(hv)
 		for v in ll2:

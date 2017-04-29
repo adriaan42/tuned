@@ -59,7 +59,7 @@ def verify(shouldbemask):
 		sys.exit(1)
 
 	# now verify each /proc/irq/$num/smp_affinity
-	interruptdirs = [ f for f in os.listdir(irqpath) if os.path.isdir(join(irqpath,f)) ]
+	interruptdirs = [ f for f in os.listdir(irqpath) if os.path.isdir(os.path.join(irqpath,f)) ]
 	# IRQ 2 - cascaded signals from IRQs 8-15 (any devices configured to use IRQ 2 will actually be using IRQ 9)
 	interruptdirs.remove("2")
 	# IRQ 0 - system timer (cannot be changed)
@@ -73,7 +73,7 @@ def verify(shouldbemask):
 			inplacemask = inplacemask | 1 << i;
 		if (inplacemask & ~shouldbemask):
 			sys.stderr.write("verify: failed: irqaffinity (%s) inplacemask=%x shouldbemask=%x\n" % (fname, inplacemask, shouldbemask))
-		sys.exit(1)
+			sys.exit(1)
 
 	sys.exit(0)
 
@@ -84,6 +84,10 @@ cpulist = parse_def_affinity(irqpath + "default_smp_affinity")
 mask = 0
 for i in cpulist:
 	mask = mask | 1 << i;
+
+if len(sys.argv) < 3 or len(str(sys.argv[2])) == 0:
+	sys.stderr.write("%s: invalid arguments\n" % os.path.basename(sys.argv[0]))
+	sys.exit(1)
 
 line = sys.argv[2]
 fields = line.strip().split(",")
@@ -105,7 +109,7 @@ fo.close()
 
 # now adjust each /proc/irq/$num/smp_affinity
 
-interruptdirs = [ f for f in os.listdir(irqpath) if os.path.isdir(join(irqpath,f)) ]
+interruptdirs = [ f for f in os.listdir(irqpath) if os.path.isdir(os.path.join(irqpath,f)) ]
 
 # IRQ 2 - cascaded signals from IRQs 8-15 (any devices configured to use IRQ 2 will actually be using IRQ 9)
 interruptdirs.remove("2")

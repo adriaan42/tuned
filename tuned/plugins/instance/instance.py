@@ -2,10 +2,13 @@ class Instance(object):
 	"""
 	"""
 
-	def __init__(self, plugin, name, devices_expression, options):
+	def __init__(self, plugin, name, devices_expression, devices_udev_regex, script_pre, script_post, options):
 		self._plugin = plugin
 		self._name = name
 		self._devices_expression = devices_expression
+		self._devices_udev_regex = devices_udev_regex
+		self._script_pre = script_pre
+		self._script_post = script_post
 		self._options = options
 
 		self._active = True
@@ -14,6 +17,10 @@ class Instance(object):
 		self._devices = set()
 
 	# properties
+
+	@property
+	def plugin(self):
+		return self._plugin
 
 	@property
 	def name(self):
@@ -35,6 +42,18 @@ class Instance(object):
 	@property
 	def devices(self):
 		return self._devices
+
+	@property
+	def devices_udev_regex(self):
+		return self._devices_udev_regex
+
+	@property
+	def script_pre(self):
+		return self._script_pre
+
+	@property
+	def script_post(self):
+		return self._script_post
 
 	@property
 	def options(self):
@@ -59,8 +78,8 @@ class Instance(object):
 	def update_tuning(self):
 		self._plugin.instance_update_tuning(self)
 
-	def unapply_tuning(self, profile_switch = False):
-		self._plugin.instance_unapply_tuning(self, profile_switch)
+	def unapply_tuning(self, full_rollback = False):
+		self._plugin.instance_unapply_tuning(self, full_rollback)
 
 	def destroy(self):
 		self.unapply_tuning()

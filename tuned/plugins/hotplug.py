@@ -33,17 +33,17 @@ class Plugin(base.Plugin):
 
 	def _add_device(self, device):
 		device_name = device.sys_name
-		if device_name in self._devices:
+		if device_name in (self._assigned_devices | self._free_devices):
 			return
 
-		self._devices.add(device_name)
-
-		for instance_name, instance in reversed(self._instances.items()):
-			if self._device_matcher.match(instance.devices_expression, device_name):
+		for instance_name, instance in self._instances.items():
+			if len(self._get_matching_devices(instance, [device_name])) == 1:
 				log.info("instance %s: adding new device %s" % (instance_name, device_name))
 				self._assigned_devices.add(device_name)
 				instance.devices.add(device_name)
+				self._call_device_script(instance, instance.script_pre, "apply", [device_name])
 				self._added_device_apply_tuning(instance, device_name)
+				self._call_device_script(instance, instance.script_post, "apply", [device_name])
 				break
 		else:
 			log.debug("no instance wants %s" % device_name)
@@ -51,20 +51,20 @@ class Plugin(base.Plugin):
 
 	def _remove_device(self, device):
 		device_name = device.sys_name
-		if device_name not in self._devices:
+		if device_name not in (self._assigned_devices | self._free_devices):
 			return
 
 		for instance in self._instances.values():
 			if device_name in instance.devices:
+				self._call_device_script(instance, instance.script_post, "unapply", [device_name])
 				self._removed_device_unapply_tuning(instance, device_name)
+				self._call_device_script(instance, instance.script_pre, "unapply", [device_name])
 				instance.devices.remove(device_name)
 				instance.active = len(instance.devices) > 0
 				self._assigned_devices.remove(device_name)
 				break
 		else:
 			self._free_devices.remove(device_name)
-
-		self._devices.remove(device_name)
 
 	def _added_device_apply_tuning(self, instance, device_name):
 		self._execute_all_device_commands(instance, [device_name])

@@ -12,15 +12,18 @@ class VideoPlugin(base.Plugin):
 	"""
 
 	def _init_devices(self):
-		self._devices = set()
+		self._devices_supported = True
+		self._free_devices = set()
 		self._assigned_devices = set()
 
 		# FIXME: this is a blind shot, needs testing
 		for device in self._hardware_inventory.get_devices("drm").match_sys_name("card*").match_property("DEVTYPE", "drm_minor"):
-			self._devices.add(device.sys_name)
+			self._free_devices.add(device.sys_name)
 
-		self._free_devices = self._devices.copy()
 		self._cmd = commands()
+
+	def _get_device_objects(self, devices):
+		return map(lambda x: self._hardware_inventory.get_device("drm", x), devices)
 
 	@classmethod
 	def _get_config_options(self):

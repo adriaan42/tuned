@@ -19,8 +19,12 @@ else
 	GIT_PSUFFIX = .$(GIT_SUFFIX)
 	RPM_VERSION = $(NAME)-$(VERSION)-1$(GIT_PSUFFIX)
 endif
-UNITDIR = $(shell rpm --eval '%{_unitdir}' 2>/dev/null || echo /usr/lib/systemd/system)
-TMPFILESDIR = $(shell rpm --eval '%{_tmpfilesdir}' 2>/dev/null || echo /usr/lib/tmpfiles.d)
+UNITDIR_FALLBACK = /usr/lib/systemd/system
+UNITDIR_DETECT = $(shell rpm --eval '%{_unitdir}' 2>/dev/null || echo $(UNITDIR_FALLBACK))
+UNITDIR = $(UNITDIR_DETECT:%{_unitdir}=$(UNITDIR_FALLBACK))
+TMPFILESDIR_FALLBACK = /usr/lib/tmpfiles.d
+TMPFILESDIR_DETECT = $(shell rpm --eval '%{_tmpfilesdir}' 2>/dev/null || echo $(TMPFILESDIR_FALLBACK))
+TMPFILESDIR = $(TMPFILESDIR_DETECT:%{_tmpfilesdir}=$(TMPFILESDIR_FALLBACK))
 VERSIONED_NAME = $(NAME)-$(VERSION)$(GIT_PSUFFIX)
 
 DATADIR = /usr/share
@@ -87,11 +91,12 @@ scratch-build: mock-devel-build
 	brew build --scratch --nowait rhel-7.2-candidate `ls mock-result-dir/*$(GIT_DATE)git*.*.src.rpm | head -n 1`
 
 nightly: tidy-mock-result-dir createrepo scratch-build
-	rsync -ave ssh --delete --progress mock-result-dir/* jskarvad@fedorapeople.org:/home/fedora/jskarvad/public_html/tuned/devel/repo/
+	rsync -ave ssh --delete --progress mock-result-dir/ jskarvad@fedorapeople.org:/home/fedora/jskarvad/public_html/tuned/devel/repo/
 
 install-dirs:
 	mkdir -p $(DESTDIR)$(PYTHON_SITELIB)
 	mkdir -p $(DESTDIR)$(TUNED_PROFILESDIR)
+	mkdir -p $(DESTDIR)/var/lib/tuned
 	mkdir -p $(DESTDIR)/var/log/tuned
 	mkdir -p $(DESTDIR)/run/tuned
 	mkdir -p $(DESTDIR)$(DOCDIR)
@@ -128,6 +133,8 @@ install: install-dirs
 		$(DESTDIR)/etc/tuned/realtime-virtual-guest-variables.conf
 	mv $(DESTDIR)$(TUNED_PROFILESDIR)/realtime-virtual-host/realtime-virtual-host-variables.conf \
 		$(DESTDIR)/etc/tuned/realtime-virtual-host-variables.conf
+	mv $(DESTDIR)$(TUNED_PROFILESDIR)/cpu-partitioning/cpu-partitioning-variables.conf \
+		$(DESTDIR)/etc/tuned/cpu-partitioning-variables.conf
 	install -pm 0644 recommend.conf $(DESTDIR)$(TUNED_PROFILESDIR)/recommend.conf
 
 	# bash completion
@@ -175,4 +182,7 @@ clean:
 test:
 	python -m unittest discover tests
 
-.PHONY: clean archive srpm tag test
+lint:
+	pylint -E -f parseable tuned *.py
+
+.PHONY: clean archive srpm tag test lint

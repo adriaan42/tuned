@@ -24,6 +24,7 @@ class Application(object):
 		monitors_repository = monitors.Repository()
 		hardware_inventory = hardware.Inventory()
 		device_matcher = hardware.DeviceMatcher()
+		device_matcher_udev = hardware.DeviceMatcherUdev()
 		plugin_instance_factory = plugins.instance.Factory()
 		self.variables = profiles.variables.Variables()
 
@@ -33,13 +34,15 @@ class Application(object):
 		else:
 			log.info("dynamic tuning is globally disabled")
 
-		plugins_repository = plugins.Repository(monitors_repository, storage_factory, hardware_inventory, device_matcher, plugin_instance_factory, self.config, self.variables)
-		unit_manager = units.Manager(plugins_repository, monitors_repository)
+		plugins_repository = plugins.Repository(monitors_repository, storage_factory, hardware_inventory,\
+			device_matcher, device_matcher_udev, plugin_instance_factory, self.config, self.variables)
+		def_instance_priority = int(self.config.get(consts.CFG_DEFAULT_INSTANCE_PRIORITY, consts.CFG_DEF_DEFAULT_INSTANCE_PRIORITY))
+		unit_manager = units.Manager(plugins_repository, monitors_repository, def_instance_priority)
 
 		profile_factory = profiles.Factory()
 		profile_merger = profiles.Merger()
 		profile_locator = profiles.Locator(consts.LOAD_DIRECTORIES)
-		profile_loader = profiles.Loader(profile_locator, profile_factory, profile_merger, self.variables)
+		profile_loader = profiles.Loader(profile_locator, profile_factory, profile_merger, self.config, self.variables)
 
 		self._daemon = daemon.Daemon(unit_manager, profile_loader, profile_name, self.config, self)
 		self._controller = controller.Controller(self._daemon, self.config)

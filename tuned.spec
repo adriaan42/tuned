@@ -10,11 +10,11 @@
 
 Summary: A dynamic adaptive system tuning daemon
 Name: tuned
-Version: 2.7.1
+Version: 2.8.0
 Release: 1%{?with_snapshot:.%{git_suffix}}%{?dist}
 License: GPLv2+
-Source: https://fedorahosted.org/releases/t/u/tuned/tuned-%{version}.tar.bz2
-URL: https://fedorahosted.org/tuned/
+Source: https://jskarvad.fedorapeople.org/tuned/download/tuned-%{version}.tar.bz2
+URL: http://www.tuned-project.org/
 BuildArch: noarch
 BuildRequires: python, systemd, desktop-file-utils
 Requires(post): systemd, virt-what
@@ -22,7 +22,8 @@ Requires(preun): systemd
 Requires(postun): systemd
 Requires: python-decorator, dbus-python, pygobject3-base, python-pyudev
 Requires: virt-what, python-configobj, ethtool, gawk, kernel-tools, hdparm
-Requires: util-linux, python-perf, dbus, polkit
+Requires: util-linux, python-perf, dbus, polkit, python-linux-procfs
+Requires: python-schedutils
 
 %description
 The tuned package contains a daemon that tunes system settings dynamically.
@@ -70,52 +71,79 @@ instead of fewer large ones).
 
 %package profiles-sap
 Summary: Additional tuned profile(s) targeted to SAP NetWeaver loads
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{version}
 
 %description profiles-sap
 Additional tuned profile(s) targeted to SAP NetWeaver loads.
 
 %package profiles-oracle
 Summary: Additional tuned profile(s) targeted to Oracle loads
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{version}
 
 %description profiles-oracle
 Additional tuned profile(s) targeted to Oracle loads.
 
 %package profiles-sap-hana
 Summary: Additional tuned profile(s) targeted to SAP HANA loads
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{version}
 
 %description profiles-sap-hana
 Additional tuned profile(s) targeted to SAP HANA loads.
 
 %package profiles-atomic
 Summary: Additional tuned profile(s) targeted to Atomic
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{version}
 
 %description profiles-atomic
 Additional tuned profile(s) targeted to Atomic host and guest.
 
 %package profiles-realtime
 Summary: Additional tuned profile(s) targeted to realtime
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{version}
 Requires: tuna
 
 %description profiles-realtime
 Additional tuned profile(s) targeted to realtime.
 
+%package profiles-nfv-guest
+Summary: Additional tuned profile(s) targeted to Network Function Virtualization (NFV) guest
+Requires: %{name} = %{version}
+Requires: %{name}-profiles-realtime = %{version}
+Requires: tuna
+
+%description profiles-nfv-guest
+Additional tuned profile(s) targeted to Network Function Virtualization (NFV) guest.
+
+%package profiles-nfv-host
+Summary: Additional tuned profile(s) targeted to Network Function Virtualization (NFV) host
+Requires: %{name} = %{version}
+Requires: %{name}-profiles-realtime = %{version}
+Requires: tuna, qemu-kvm-tools-rhev
+
+%description profiles-nfv-host
+Additional tuned profile(s) targeted to Network Function Virtualization (NFV) host.
+
+# this is kept for backward compatibility, it should be dropped for RHEL-8
 %package profiles-nfv
 Summary: Additional tuned profile(s) targeted to Network Function Virtualization (NFV)
-Requires: %{name} = %{version}-%{release}
-Requires: %{name}-profiles-realtime = %{version}-%{release}
-Requires: tuna, qemu-kvm-tools-rhev
+Requires: %{name} = %{version}
+Requires: %{name}-profiles-nfv-guest = %{version}
+Requires: %{name}-profiles-nfv-host = %{version}
 
 %description profiles-nfv
 Additional tuned profile(s) targeted to Network Function Virtualization (NFV).
 
+%package profiles-cpu-partitioning
+Summary: Additional tuned profile(s) optimized for CPU partitioning
+Requires: %{name} = %{version}
+Requires: tuna
+
+%description profiles-cpu-partitioning
+Additional tuned profile(s) optimized for CPU partitioning.
+
 %package profiles-compat
 Summary: Additional tuned profiles mainly for backward compatibility with tuned 1.0
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{version}
 
 %description profiles-compat
 Additional tuned profiles mainly for backward compatibility with tuned 1.0.
@@ -140,6 +168,9 @@ mkdir -p %{buildroot}%{_datadir}/tuned/grub2
 mv %{buildroot}%{_sysconfdir}/grub.d/00_tuned %{buildroot}%{_datadir}/tuned/grub2/00_tuned
 rmdir %{buildroot}%{_sysconfdir}/grub.d
 
+# ghost for persistent storage
+mkdir -p %{buildroot}%{_var}/lib/tuned
+
 # ghost for NFV
 mkdir -p %{buildroot}%{_sysconfdir}/modprobe.d
 touch %{buildroot}%{_sysconfdir}/modprobe.d/kvm.rt.tuned.conf
@@ -162,6 +193,10 @@ fi
 
 %preun
 %systemd_preun tuned.service
+if [ "$1" == 0 ]; then
+# clear persistent storage
+  rm -f %{_var}/lib/tuned/*
+fi
 
 
 %postun
@@ -189,7 +224,8 @@ fi
 # and tuned is noarch package, thus the following hack is needed
 if [ -d %{_sysconfdir}/grub.d ]; then
   cp -a %{_datadir}/tuned/grub2/00_tuned %{_sysconfdir}/grub.d/00_tuned
-  selinuxenabled && restorecon %{_sysconfdir}/grub.d/00_tuned || :
+  selinuxenabled &>/dev/null && \
+    restorecon %{_sysconfdir}/grub.d/00_tuned &>/dev/null || :
 fi
 
 
@@ -212,6 +248,7 @@ fi
 %defattr(-,root,root,-)
 %exclude %{docdir}/README.utils
 %exclude %{docdir}/README.scomes
+%exclude %{docdir}/README.NFV
 %doc %{docdir}
 %{_datadir}/bash-completion/completions/tuned-adm
 %exclude %{python_sitelib}/tuned/gtk
@@ -219,6 +256,9 @@ fi
 %{_sbindir}/tuned
 %{_sbindir}/tuned-adm
 %exclude %{_sysconfdir}/tuned/realtime-variables.conf
+%exclude %{_sysconfdir}/tuned/realtime-virtual-guest-variables.conf
+%exclude %{_sysconfdir}/tuned/realtime-virtual-host-variables.conf
+%exclude %{_sysconfdir}/tuned/cpu-partitioning-variables.conf
 %exclude %{_prefix}/lib/tuned/default
 %exclude %{_prefix}/lib/tuned/desktop-powersave
 %exclude %{_prefix}/lib/tuned/laptop-ac-powersave
@@ -235,9 +275,11 @@ fi
 %exclude %{_prefix}/lib/tuned/realtime
 %exclude %{_prefix}/lib/tuned/realtime-virtual-guest
 %exclude %{_prefix}/lib/tuned/realtime-virtual-host
+%exclude %{_prefix}/lib/tuned/cpu-partitioning
 %{_prefix}/lib/tuned
 %dir %{_sysconfdir}/tuned
 %dir %{_libexecdir}/tuned
+%{_libexecdir}/tuned/defirqaffinity*
 %config(noreplace) %verify(not size mtime md5) %{_sysconfdir}/tuned/active_profile
 %config(noreplace) %{_sysconfdir}/tuned/tuned-main.conf
 %config(noreplace) %verify(not size mtime md5) %{_sysconfdir}/tuned/bootcmdline
@@ -247,12 +289,14 @@ fi
 %{_unitdir}/tuned.service
 %dir %{_localstatedir}/log/tuned
 %dir /run/tuned
+%dir %{_var}/lib/tuned
 %{_mandir}/man5/tuned*
 %{_mandir}/man7/tuned-profiles.7*
 %{_mandir}/man8/tuned*
 %dir %{_datadir}/tuned
 %{_datadir}/tuned/grub2
 %{_datadir}/polkit-1/actions/com.redhat.tuned.policy
+%ghost %{_sysconfdir}/modprobe.d/kvm.rt.tuned.conf
 
 %files gtk
 %defattr(-,root,root,-)
@@ -310,15 +354,27 @@ fi
 %{_prefix}/lib/tuned/realtime
 %{_mandir}/man7/tuned-profiles-realtime.7*
 
-%files profiles-nfv
+%files profiles-nfv-guest
 %defattr(-,root,root,-)
 %config(noreplace) %{_sysconfdir}/tuned/realtime-virtual-guest-variables.conf
-%config(noreplace) %{_sysconfdir}/tuned/realtime-virtual-host-variables.conf
-%ghost %{_sysconfdir}/modprobe.d/kvm.rt.tuned.conf
 %{_prefix}/lib/tuned/realtime-virtual-guest
+%{_mandir}/man7/tuned-profiles-nfv-guest.7*
+
+%files profiles-nfv-host
+%defattr(-,root,root,-)
+%config(noreplace) %{_sysconfdir}/tuned/realtime-virtual-host-variables.conf
 %{_prefix}/lib/tuned/realtime-virtual-host
-%{_libexecdir}/tuned/defirqaffinity*
-%{_mandir}/man7/tuned-profiles-nfv.7*
+%{_mandir}/man7/tuned-profiles-nfv-host.7*
+
+%files profiles-nfv
+%defattr(-,root,root,-)
+%doc %{docdir}/README.NFV
+
+%files profiles-cpu-partitioning
+%defattr(-,root,root,-)
+%config(noreplace) %{_sysconfdir}/tuned/cpu-partitioning-variables.conf
+%{_prefix}/lib/tuned/cpu-partitioning
+%{_mandir}/man7/tuned-profiles-cpu-partitioning.7*
 
 %files profiles-compat
 %defattr(-,root,root,-)
@@ -332,6 +388,64 @@ fi
 %{_mandir}/man7/tuned-profiles-compat.7*
 
 %changelog
+* Fri Apr  7 2017 Jaroslav Škarvada <jskarvad@redhat.com> - 2.8.0-1
+- new release
+  - rebase tuned to latest upstream
+    resolves: rhbz#1388454
+  - cpu-partitioning: enabled timer migration
+    resolves: rhbz#1408308
+  - cpu-partitioning: disabled kvmclock sync and ple
+    resolves: rhbz#1395855
+  - spec: muted error if there is no selinux support
+    resolves: rhbz#1404214
+  - units: implemented instance priority
+    resolves: rhbz#1246172
+  - bootloader: added support for initrd overlays
+    resolves: rhbz#1414098
+  - cpu-partitioning: set CPUAffinity early in initrd image
+    resolves: rhbz#1394965
+  - cpu-partitioning: set workqueue affinity early
+    resolves: rhbz#1395899
+  - scsi_host: fixed probing of ALPM, missing ALPM logged as info
+    resolves: rhbz#1416712
+  - added new profile cpu-partitioning
+    resolves: rhbz#1359956
+  - bootloader: improved inheritance
+    resolves: rhbz#1274464
+  - units: mplemented udev-based regexp device matching
+    resolves: rhbz#1251240
+  - units: introduced pre_script, post_script
+    resolves: rhbz#1246176
+  - realtime-virtual-host: accommodate new ktimersoftd thread
+    resolves: rhbz#1332563
+  - defirqaffinity: fixed traceback due to syntax error
+    resolves: rhbz#1369791
+  - variables: support inheritance of variables
+    resolves: rhbz#1433496
+  - scheduler: added support for cores isolation
+    resolves: rhbz#1403309
+  - tuned-profiles-nfv splitted to host/guest and dropped unneeded dependency
+    resolves: rhbz#1413111
+  - desktop: fixed typo in profile summary
+    resolves: rhbz#1421238
+  - with systemd don't do full rollback on shutdown / reboot
+    resolves: rhbz#1421286
+  - builtin functions: added virt_check function and support to include
+    resolves: rhbz#1426654
+  - cpulist_present: explicitly sorted present CPUs
+    resolves: rhbz#1432240
+  - plugin_scheduler: fixed initialization
+    resolves: rhbz#1433496
+  - log errors when applying a profile fails
+    resolves: rhbz#1434360
+  - systemd: added support for older systemd CPUAffinity syntax
+    resolves: rhbz#1441791
+  - scheduler: added workarounds for low level exceptions from
+    python-linux-procfs
+    resolves: rhbz#1441792
+  - bootloader: workaround for adding tuned_initrd to new kernels on restart
+    resolves: rhbz#1441797
+
 * Tue Aug  2 2016 Jaroslav Škarvada <jskarvad@redhat.com> - 2.7.1-1
 - new-release
   - gui: fixed traceback caused by DBus paths copy&paste error

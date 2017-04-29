@@ -4,6 +4,8 @@ import tuned.profiles.variables
 import tuned.logs
 import collections
 from tuned.utils.commands import commands
+import os
+from subprocess import Popen, PIPE
 
 log = tuned.logs.get()
 
@@ -17,13 +19,14 @@ class Plugin(object):
 	Intentionally a lot of logic is included in the plugin to increase plugin flexibility.
 	"""
 
-	def __init__(self, monitors_repository, storage_factory, hardware_inventory, device_matcher, instance_factory, global_cfg, variables):
+	def __init__(self, monitors_repository, storage_factory, hardware_inventory, device_matcher, device_matcher_udev, instance_factory, global_cfg, variables):
 		"""Plugin constructor."""
 
 		self._storage = storage_factory.create(self.__class__.__name__)
 		self._monitors_repository = monitors_repository
 		self._hardware_inventory = hardware_inventory
 		self._device_matcher = device_matcher
+		self._device_matcher_udev = device_matcher_udev
 		self._instance_factory = instance_factory
 
 		self._instances = collections.OrderedDict()
@@ -80,13 +83,14 @@ class Plugin(object):
 	# Interface for manipulation with instances of the plugin.
 	#
 
-	def create_instance(self, name, devices_expression, options):
+	def create_instance(self, name, devices_expression, devices_udev_regex, script_pre, script_post, options):
 		"""Create new instance of the plugin and seize the devices."""
 		if name in self._instances:
 			raise Exception("Plugin instance with name '%s' already exists." % name)
 
 		effective_options = self._get_effective_options(options)
-		instance = self._instance_factory.create(self, name, devices_expression, effective_options)
+		instance = self._instance_factory.create(self, name, devices_expression, devices_udev_regex, \
+			script_pre, script_post, effective_options)
 		self._instances[name] = instance
 
 		return instance
@@ -102,11 +106,10 @@ class Plugin(object):
 		self._destroy_instance(instance)
 		del self._instances[instance.name]
 
-	def initialize_instances(self):
-		"""Initialize all created instances."""
-		for (instance_name, instance) in self._instances.items():
-			log.debug("initializing instance %s (%s)" % (instance_name, self.name))
-			self._instance_init(instance)
+	def initialize_instance(self, instance):
+		"""Initialize an instance."""
+		log.debug("initializing instance %s (%s)" % (instance.name, self.name))
+		self._instance_init(instance)
 
 	def destroy_instances(self):
 		"""Destroy all instances."""
@@ -130,37 +133,49 @@ class Plugin(object):
 	#
 
 	def _init_devices(self):
-		self._devices = None
+		self._devices_supported = False
 		self._assigned_devices = set()
 		self._free_devices = set()
 
-	def _devices_supported(self):
-		return self._devices is not None
+	def _get_device_objects(self, devices):
+		"""Override this in a subclass to transform a list of device names (e.g. ['sda'])
+		   to a list of pyudev.Device objects, if your plugin supports it"""
+		return None
 
 	def _get_matching_devices(self, instance, devices):
-		return set(self._device_matcher.match_list(instance.devices_expression, devices))
+		if instance.devices_udev_regex is None:
+			return set(self._device_matcher.match_list(instance.devices_expression, devices))
+		else:
+			udev_devices = self._get_device_objects(devices)
+			if udev_devices is None:
+				log.error("Plugin '%s' does not support the 'devices_udev_regex' option", self.name)
+				return set()
+			udev_devices = self._device_matcher_udev.match_list(instance.devices_udev_regex, udev_devices)
+			return set(map(lambda x: x.sys_name, udev_devices))
 
-	def assign_free_devices(self):
-		if not self._devices_supported():
+	def assign_free_devices(self, instance):
+		if not self._devices_supported:
 			return
 
-		log.debug("assigning devices to all instances")
-		for instance_name, instance in reversed(self._instances.items()):
-			to_assign = self._get_matching_devices(instance, self._free_devices)
-			instance.active = len(to_assign) > 0
-			if not instance.active:
-				log.warn("instance %s: no matching devices available" % instance_name)
-			else:
-				log.info("instance %s: assigning devices %s" % (instance_name, ", ".join(to_assign)))
-				instance.devices.update(to_assign) # cannot use |=
-				self._assigned_devices |= to_assign
-				self._free_devices -= to_assign
+		log.debug("assigning devices to instance %s" % instance.name)
+		to_assign = self._get_matching_devices(instance, self._free_devices)
+		instance.active = len(to_assign) > 0
+		if not instance.active:
+			log.warn("instance %s: no matching devices available" % instance.name)
+		else:
+			name = instance.name
+			if instance.name != self.name:
+				name += " (%s)" % self.name
+			log.info("instance %s: assigning devices %s" % (name, ", ".join(to_assign)))
+			instance.devices.update(to_assign) # cannot use |=
+			self._assigned_devices |= to_assign
+			self._free_devices -= to_assign
 
 	def release_devices(self, instance):
-		if not self._devices_supported():
+		if not self._devices_supported:
 			return
 
-		to_release = instance.devices & self._devices
+		to_release = instance.devices & self._assigned_devices
 
 		instance.active = False
 		instance.devices.clear()
@@ -172,13 +187,52 @@ class Plugin(object):
 	#
 
 	def _run_for_each_device(self, instance, callback):
-		if self._devices_supported():
+		if self._devices_supported:
 			devices = instance.devices
 		else:
 			devices = [None, ]
 
 		for device in devices:
 			callback(instance, device)
+
+	def _instance_pre_static(self, instance, enabling):
+		pass
+
+	def _instance_post_static(self, instance, enabling):
+		pass
+
+	def _call_device_script(self, instance, script, op, devices, full_rollback = False):
+		if script is None:
+			return None
+		if len(devices) == 0:
+			log.warn("Instance '%s': no device to call script '%s' for." % (instance.name, script))
+			return None
+		if not script.startswith("/"):
+			log.error("Relative paths cannot be used in script_pre or script_post. " \
+				+ "Use ${i:PROFILE_DIR}.")
+			return False
+		dir_name = os.path.dirname(script)
+		ret = True
+		for dev in devices:
+			environ = os.environ
+			environ.update(self._variables.get_env())
+			arguments = [op]
+			if full_rollback:
+				arguments.append("full_rollback")
+			arguments.append(dev)
+			log.info("calling script '%s' with arguments '%s'" % (script, str(arguments)))
+			log.debug("using environment '%s'" % str(environ.items()))
+			try:
+				proc = Popen([script] +  arguments, stdout=PIPE, stderr=PIPE, close_fds=True, env=environ, \
+					cwd = dir_name)
+				out, err = proc.communicate()
+				if proc.returncode:
+					log.error("script '%s' error: %d, '%s'" % (script, proc.returncode, err[:-1]))
+					ret = False
+			except (OSError,IOError) as e:
+				log.error("script '%s' error: %s" % (script, e))
+				ret = False
+		return ret
 
 	def instance_apply_tuning(self, instance):
 		"""
@@ -188,7 +242,11 @@ class Plugin(object):
 			return
 
 		if instance.has_static_tuning:
+			self._call_device_script(instance, instance.script_pre, "apply", instance.devices)
+			self._instance_pre_static(instance, True)
 			self._instance_apply_static(instance)
+			self._instance_post_static(instance, True)
+			self._call_device_script(instance, instance.script_post, "apply", instance.devices)
 		if instance.has_dynamic_tuning and self._global_cfg.get(consts.CFG_DYNAMIC_TUNING, consts.CFG_DEF_DYNAMIC_TUNING):
 			self._run_for_each_device(instance, self._instance_apply_dynamic)
 
@@ -200,7 +258,13 @@ class Plugin(object):
 			return None
 
 		if instance.has_static_tuning:
-			return self._instance_verify_static(instance, ignore_missing)
+			if self._call_device_script(instance, instance.script_pre, "verify", instance.devices) == False:
+				return False
+			if self._instance_verify_static(instance, ignore_missing) == False:
+				return False
+			if self._call_device_script(instance, instance.script_post, "verify", instance.devices) == False:
+				return False
+			return True
 		else:
 			return None
 
@@ -213,15 +277,18 @@ class Plugin(object):
 		if instance.has_dynamic_tuning and self._global_cfg.get(consts.CFG_DYNAMIC_TUNING, consts.CFG_DEF_DYNAMIC_TUNING):
 			self._run_for_each_device(instance, self._instance_update_dynamic)
 
-	# profile_switch is true if unapplying tuning due to profile switch
-	def instance_unapply_tuning(self, instance, profile_switch = False):
+	def instance_unapply_tuning(self, instance, full_rollback = False):
 		"""
 		Remove all tunings applied by the plugin instance.
 		"""
 		if instance.has_dynamic_tuning and self._global_cfg.get(consts.CFG_DYNAMIC_TUNING, consts.CFG_DEF_DYNAMIC_TUNING):
 			self._run_for_each_device(instance, self._instance_unapply_dynamic)
 		if instance.has_static_tuning:
-			self._instance_unapply_static(instance, profile_switch)
+			self._call_device_script(instance, instance.script_post, "unapply", instance.devices, full_rollback = full_rollback)
+			self._instance_pre_static(instance, False)
+			self._instance_unapply_static(instance, full_rollback)
+			self._instance_post_static(instance, False)
+			self._call_device_script(instance, instance.script_pre, "unapply", instance.devices, full_rollback = full_rollback)
 
 	def _instance_apply_static(self, instance):
 		self._execute_all_non_device_commands(instance)
@@ -235,7 +302,7 @@ class Plugin(object):
 			ret = False
 		return ret
 
-	def _instance_unapply_static(self, instance, profile_switch = False):
+	def _instance_unapply_static(self, instance, full_rollback = False):
 		self._cleanup_all_device_commands(instance, instance.devices)
 		self._cleanup_all_non_device_commands(instance)
 
@@ -405,7 +472,7 @@ class Plugin(object):
 
 	def _execute_device_command(self, instance, command, device, new_value):
 		if command["custom"] is not None:
-			command["custom"](True, new_value, device, False)
+			command["custom"](True, new_value, device, False, False)
 		else:
 			new_value = self._check_and_save_value(instance, command, device, new_value)
 			if new_value is not None:
@@ -413,7 +480,7 @@ class Plugin(object):
 
 	def _execute_non_device_command(self, instance, command, new_value):
 		if command["custom"] is not None:
-			command["custom"](True, new_value, False)
+			command["custom"](True, new_value, False, False)
 		else:
 			new_value = self._check_and_save_value(instance, command, None, new_value)
 			if new_value is not None:
@@ -461,7 +528,7 @@ class Plugin(object):
 
 	def _verify_device_command(self, instance, command, device, new_value, ignore_missing):
 		if command["custom"] is not None:
-			return command["custom"](True, new_value, device, True)
+			return command["custom"](True, new_value, device, True, ignore_missing)
 		current_value = self._get_current_value(command, device)
 		new_value = self._process_assignment_modifiers(new_value, current_value)
 		if new_value is None:
@@ -471,7 +538,7 @@ class Plugin(object):
 
 	def _verify_non_device_command(self, instance, command, new_value, ignore_missing):
 		if command["custom"] is not None:
-			return command["custom"](True, new_value, True)
+			return command["custom"](True, new_value, True, ignore_missing)
 		current_value = self._get_current_value(command)
 		new_value = self._process_assignment_modifiers(new_value, current_value)
 		if new_value is None:
@@ -480,19 +547,19 @@ class Plugin(object):
 		return self._verify_value(command["name"], new_value, current_value, ignore_missing)
 
 	def _cleanup_all_non_device_commands(self, instance):
-		for command in filter(lambda command: not command["per_device"], self._commands.values()):
+		for command in reversed(filter(lambda command: not command["per_device"], self._commands.values())):
 			if (instance.options.get(command["name"], None) is not None) or (command["name"] in self._options_used_by_dynamic):
 				self._cleanup_non_device_command(instance, command)
 
 	def _cleanup_all_device_commands(self, instance, devices):
-		for command in filter(lambda command: command["per_device"], self._commands.values()):
+		for command in reversed(filter(lambda command: command["per_device"], self._commands.values())):
 			if (instance.options.get(command["name"], None) is not None) or (command["name"] in self._options_used_by_dynamic):
 				for device in devices:
 					self._cleanup_device_command(instance, command, device)
 
 	def _cleanup_device_command(self, instance, command, device):
 		if command["custom"] is not None:
-			command["custom"](False, None, device, False)
+			command["custom"](False, None, device, False, False)
 		else:
 			old_value = self._storage_get(instance, command, device)
 			if old_value is not None:
@@ -501,7 +568,7 @@ class Plugin(object):
 
 	def _cleanup_non_device_command(self, instance, command):
 		if command["custom"] is not None:
-			command["custom"](False, None, False)
+			command["custom"](False, None, False, False)
 		else:
 			old_value = self._storage_get(instance, command)
 			if old_value is not None:

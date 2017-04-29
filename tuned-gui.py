@@ -49,6 +49,7 @@ import os
 import time
 import configobj
 
+import subprocess
 import tuned.logs
 import tuned.consts as consts
 import tuned.version as version
@@ -843,7 +844,7 @@ class Base(object):
 			else:
 				self._cmd.execute(['systemctl', 'disable', 'tuned'])
 		else:
-			raise NotImplemented
+			raise NotImplementedError()
 
 	def execute_switch_tuned_admin_functions(self, switch, data):
 		self.is_admin = self.switch_tuned_admin_functions.get_active()
@@ -1010,16 +1011,21 @@ class Base(object):
 		self._cmd.execute(['service', 'tuned', 'start'])
 		time.sleep(10)
 		self.controller = tuned.admin.DBusController(consts.DBUS_BUS,
-				consts.DBUS_OBJECT, consts.DBUS_INTERFACE)
+				consts.DBUS_INTERFACE, consts.DBUS_OBJECT)
 
 
 if __name__ == '__main__':
 
 	if os.geteuid() != 0:
 		try:
-			os.execvp('pkexec', ['pkexec ' + EXECNAME, EXECNAME] + sys.argv[1:])
-		except (IOError, OSError) as e:
-			pass
+			# Explicitly disabling shell to be safe
+			ec = subprocess.call(['pkexec', EXECNAME] + sys.argv[1:], shell = False)
+		except (subprocess.CalledProcessError) as e:
+			print >> sys.stderr, 'Error elevating privileges: %s' % e
+		else:
+			# If not pkexec error
+			if ec not in [126, 127]:
+				sys.exit(0)
 		# In case of error elevating privileges
 		print >> sys.stderr, 'Superuser permissions are required to run the daemon.'
 		sys.exit(1)

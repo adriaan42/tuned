@@ -1,6 +1,8 @@
+import collections
 import tuned.exceptions
 import tuned.logs
 import tuned.plugins.exceptions
+import tuned.consts as consts
 
 log = tuned.logs.get()
 
@@ -11,10 +13,11 @@ class Manager(object):
 	Manager creates plugin instances and keeps a track of them.
 	"""
 
-	def __init__(self, plugins_repository, monitors_repository):
+	def __init__(self, plugins_repository, monitors_repository, def_instance_priority):
 		super(self.__class__, self).__init__()
 		self._plugins_repository = plugins_repository
 		self._monitors_repository = monitors_repository
+		self._def_instance_priority = def_instance_priority
 		self._instances = []
 		self._plugins = []
 
@@ -27,22 +30,25 @@ class Manager(object):
 		return self._instances
 
 	def create(self, instances_config):
-
-		# group instances by plugin
-
-		instances_by_plugin = {}
+		instance_info_list = []
 		for instance_name, instance_info in instances_config.items():
 			if not instance_info.enabled:
 				log.debug("skipping disabled instance '%s'" % instance_name)
 				continue
-			instances_by_plugin.setdefault(instance_info.type, [])
-			instances_by_plugin[instance_info.type].append(instance_info)
+			instance_info.options.setdefault("priority", self._def_instance_priority)
+			instance_info.options["priority"] = int(instance_info.options["priority"])
+			instance_info_list.append(instance_info)
 
-		# create all plugin instances at once
+		instance_info_list.sort(key=lambda x: x.options["priority"])
+		plugins_by_name = collections.OrderedDict()
+		for instance_info in instance_info_list:
+			instance_info.options.pop("priority")
+			plugins_by_name[instance_info.type] = None
 
-		for plugin_name, instances_info in instances_by_plugin.items():
+		for plugin_name, none in plugins_by_name.items():
 			try:
 				plugin = self._plugins_repository.create(plugin_name)
+				plugins_by_name[plugin_name] = plugin
 				self._plugins.append(plugin)
 			except tuned.plugins.exceptions.NotSupportedPluginException:
 				log.info("skipping plugin '%s', not supported on your system" % plugin_name)
@@ -52,18 +58,21 @@ class Manager(object):
 				log.exception(e)
 				continue
 
-			created_instances = []
-			for instance_info in instances_info:
-				log.debug("creating '%s' (%s)" % (instance_info.name, instance_info.type))
-				new_instance = plugin.create_instance(instance_info.name, instance_info.devices, instance_info.options)
-				created_instances.append(new_instance)
-
-			plugin.assign_free_devices()
-			plugin.initialize_instances()
-
-			self._instances.extend(created_instances)
+		for instance_info in instance_info_list:
+			plugin = plugins_by_name[instance_info.type]
+			if plugin is None:
+				continue
+			log.debug("creating '%s' (%s)" % (instance_info.name, instance_info.type))
+			new_instance = plugin.create_instance(instance_info.name, instance_info.devices, instance_info.devices_udev_regex, \
+				instance_info.script_pre, instance_info.script_post, instance_info.options)
+			plugin.assign_free_devices(new_instance)
+			plugin.initialize_instance(new_instance)
+			self._instances.append(new_instance)
 
 	def destroy_all(self):
+		for instance in self._instances:
+			log.debug("destroying instance %s" % instance.name)
+			instance.plugin.destroy_instance(instance)
 		for plugin in self._plugins:
 			log.debug("cleaning plugin '%s'" % plugin.name)
 			plugin.cleanup()
@@ -91,7 +100,14 @@ class Manager(object):
 		for instance in self._instances:
 			instance.update_tuning()
 
-	# profile_switch is helper telling plugins whether the stop is due to profile switch
-	def stop_tuning(self, profile_switch = False):
-		for instance in self._instances:
-			instance.unapply_tuning(profile_switch)
+	# full_rollback is a helper telling plugins whether soft or full roll
+	# back is needed, e.g. for bootloader plugin we need e.g grub.cfg
+	# tuning to persist across reboots and restarts of the daemon, so in
+	# this case the full_rollback is usually set to False,  but we also
+	# need to clean it all up when Tuned is disabled or the profile is
+	# changed. In this case the full_rollback is set to True. In practice
+	# it means to remove all temporal or helper files, unpatch third
+	# party config files, etc.
+	def stop_tuning(self, full_rollback = False):
+		for instance in reversed(self._instances):
+			instance.unapply_tuning(full_rollback)
