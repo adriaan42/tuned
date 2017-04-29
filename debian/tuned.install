@@ -3,6 +3,7 @@ etc/grub.d/00_tuned
 etc/modprobe.d/tuned.conf
 etc/tuned/active_profile
 etc/tuned/bootcmdline
+etc/tuned/cpu-partitioning-variables.conf
 etc/tuned/realtime-variables.conf
 etc/tuned/realtime-virtual-guest-variables.conf
 etc/tuned/realtime-virtual-host-variables.conf
@@ -28,6 +29,7 @@ usr/lib/tmpfiles.d/tuned.conf
 usr/lib/tuned/atomic-guest/
 usr/lib/tuned/atomic-host/
 usr/lib/tuned/balanced/
+usr/lib/tuned/cpu-partitioning/
 usr/lib/tuned/default/
 usr/lib/tuned/defirqaffinity.py
 usr/lib/tuned/desktop-powersave/
@@ -57,17 +59,11 @@ usr/sbin/tuned
 usr/sbin/tuned-adm
 usr/share/bash-completion/completions/tuned-adm
 usr/share/doc/tuned/README
+usr/share/doc/tuned/README.NFV
 usr/share/doc/tuned/TIPS.txt
 usr/share/man/man5/tuned-main.conf.5
 usr/share/man/man5/tuned.conf.5
-usr/share/man/man7/tuned-profiles-atomic.7
-usr/share/man/man7/tuned-profiles-compat.7
-usr/share/man/man7/tuned-profiles-nfv.7
-usr/share/man/man7/tuned-profiles-oracle.7
-usr/share/man/man7/tuned-profiles-realtime.7
-usr/share/man/man7/tuned-profiles-sap-hana.7
-usr/share/man/man7/tuned-profiles-sap.7
-usr/share/man/man7/tuned-profiles.7
+usr/share/man/man7/tuned-profiles*
 usr/share/man/man8/tuned-adm.8
 usr/share/man/man8/tuned.8
 usr/share/polkit-1/actions/com.redhat.tuned.policy
