@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: tuned
-Source: https://github.com/redhat-performance/tuned
+Source: http://www.tuned-project.org/
 
 Files: *
 Copyright: 2008-2017 Red Hat, Inc.
