@@ -1,0 +1,4 @@
+# until #860957 is resolved
+tuned-utils-systemtap: unusual-interpreter usr/sbin/diskdevstat #!/usr/bin/stap
+tuned-utils-systemtap: unusual-interpreter usr/sbin/netdevstat #!/usr/bin/stap
+
