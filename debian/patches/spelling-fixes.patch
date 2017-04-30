@@ -1,6 +1,6 @@
 From: gustavo panizzo <gfa@debian.org>
 Subject: fix spelling mistakes caught by lintian
-Forwarded: https://github.com/redhat-performance/tuned/issues/46
+Forwarded: https://github.com/redhat-performance/tuned/pull/41 and https://github.com/redhat-performance/tuned/pull/48
 --- a/man/varnetload.8
 +++ b/man/varnetload.8
 @@ -1,10 +1,10 @@
