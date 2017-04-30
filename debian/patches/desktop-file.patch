@@ -1,0 +1,31 @@
+From: gustavo panizzo <gfa@debian.org>
+Subject: fix lintian warnings on desktop file
+Forwarded: https://github.com/redhat-performance/tuned/issues/45
+--- a/tuned-gui.desktop
++++ b/tuned-gui.desktop
+@@ -1,11 +1,11 @@
+ [Desktop Entry]
+-Encoding=UTF-8
+ Name=tuned-gui
+-GenericName=tuned-gui
++GenericName=tuned
+ Comment=GTK GUI that can control Tuned daemon and provides simple profile editor
+-Exec=tuned-gui
++Exec=/usr/sbin/tuned-gui
+ Icon=tuned
+ Terminal=false
+ Type=Application
+ Categories=System;
+ Version=1.0
++Keywords=Tuning;System;Monitoring;
+--- a/Makefile
++++ b/Makefile
+@@ -113,7 +113,7 @@ install: install-dirs
+ 		install -Dpm 0755 $(file) $(DESTDIR)/usr/sbin/$(notdir $(file));)
+ 
+ 	# glade
+-	install -Dpm 0755 tuned-gui.glade $(DESTDIR)$(DATADIR)/tuned/ui/tuned-gui.glade
++	install -Dpm 0644 tuned-gui.glade $(DESTDIR)$(DATADIR)/tuned/ui/tuned-gui.glade
+ 
+ 	# tools
+ 	install -Dpm 0755 experiments/powertop2tuned.py $(DESTDIR)/usr/bin/powertop2tuned

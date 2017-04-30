@@ -1,3 +1,4 @@
 pkgconfig.patch
 libexec.patch
 fix-NF-FI-macros-in-manpages.patch
+desktop-file.patch
