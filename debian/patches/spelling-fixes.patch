@@ -1,0 +1,140 @@
+From: gustavo panizzo <gfa@debian.org>
+Subject: fix spelling mistakes caught by lintian
+Forwarded: https://github.com/redhat-performance/tuned/issues/46
+--- a/man/varnetload.8
++++ b/man/varnetload.8
+@@ -1,10 +1,10 @@
+-.TH "varnetload" "8" "13 Jan 2011" "Phil Knirsch" "Tool to create reproducable network traffic"
++.TH "varnetload" "8" "13 Jan 2011" "Phil Knirsch" "Tool to create reproducible network traffic"
+ .SH NAME
+-varnetload - tool to create reproducable network traffic
++varnetload - tool to create reproducible network traffic
+ .SH SYNOPSIS
+ \fBvarnetload\fP [\fI\-d delay\fP] [\fI\-t time to run\fP] [\fI\-u url\fP]
+ .SH DESCRIPTION
+-\fBvarnetload\fR is a simple python script to create reproducable sustained network traffic.
++\fBvarnetload\fR is a simple python script to create reproducible sustained network traffic.
+ 
+ In order to use it effectively, you need to have an HTTP server present in your local LAN where you
+ can put files. Upload a large HTML (or any other kind of file) to the HTTP server. Use the -u option
+@@ -12,7 +12,7 @@ of the script to point to that URL. Play
+ 
+ .TP
+ delay
+-Sets delay between individual downloads in miliseconds. Default value is 1000. But you my find values
++Sets delay between individual downloads in milliseconds. Default value is 1000. But you my find values
+ range from 0 to 500 more useful.
+ .TP
+ time to run
+--- a/man/tuned.conf.5
++++ b/man/tuned.conf.5
+@@ -45,7 +45,7 @@ If you omit this option, all found devic
+ replace=1
+ If there is conflict between two plugins (meaning two plugins of the same
+ type are trying to configure the same devices), then the plugin defined as
+-last replaces all options defined by the previosly defined plugin.
++last replaces all options defined by the previously defined plugin.
+ .LP
+ Plugins can also have plugin related options.
+ 
+--- a/man/tuned-main.conf.5
++++ b/man/tuned-main.conf.5
+@@ -36,7 +36,7 @@ request profile switch, it may take up t
+ Increase this number for higher responsiveness times and more power
+ savings (due to lower number of wakeups). In case you have unpatched
+ Python 2 interpreter, this settings will have no visible effect,
+-because the intepreter will poll 20 times per second. It is only
++because the interpreter will poll 20 times per second. It is only
+ applicable if \fBdaemon\fR is enabled.
+ 
+ .TP
+@@ -68,7 +68,7 @@ This controls whether to reapply sysctl
+ \fBsysctl --system\fR after Tuned sysctl settings are applied, i.e. if
+ set to \fBTrue\fR or \fB1\fR Tuned sysctl settings will not override system
+ sysctl settings. If set to \fBFalse\fR or \fB0\fR Tuned sysctl settings will
+-override system sysctl settings. By defualt it's set to \fBTrue\fR.
++override system sysctl settings. By default it's set to \fBTrue\fR.
+ 
+ .TP
+ .BI default_instance_priority= INT
+--- a/man/tuned-profiles.7
++++ b/man/tuned-profiles.7
+@@ -28,7 +28,7 @@ These are the base profiles which are mo
+ package. They are targeted to various goals. Mostly they provide
+ performance optimizations but there are also profiles targeted to
+ low power consumption, low latency and others. You can mostly deduce the
+-purpose of the profile by its name or you can see full description bellow.
++purpose of the profile by its name or you can see full description below.
+ 
+ The profiles are stored in subdirectories below \fI/usr/lib/tuned\fP. If you
+ need to customize the profiles, you can copy them to \fI/etc/tuned\fP and modify
+@@ -61,7 +61,7 @@ configures it to automatic power saving.
+ .BI "powersave"
+ Maximal power saving, at the moment it enables USB autosuspend (in case
+ environment variable USB_AUTOSUSPEND is set to 1), enables ALPM power saving
+-for SATA host adapters and sets the link power manamgent policy to min_power.
++for SATA host adapters and sets the link power management policy to min_power.
+ It also enables WiFi power saving, enables multi core power savings scheduler
+ for low wakeup systems and makes sure the ondemand governor is active (if
+ supported by the current cpufreq driver). It sets the CPU energy performance
+@@ -87,17 +87,17 @@ CPU energy performance bias to performan
+ .TP
+ .BI "network\-throughput"
+ Profile for throughput network tuning. It is based on the throughput\-performance
+-profile. It additionaly increases kernel network buffers.
++profile. It additionally increases kernel network buffers.
+ 
+ .TP
+ .BI "network\-latency"
+ Profile for low latency network tuning. It is based on the latency\-performance
+-profile. It additionaly disables transparent hugepages, NUMA balancing and
++profile. It additionally disables transparent hugepages, NUMA balancing and
+ tunes several other network related sysctl parameters.
+ 
+ .TP
+ .BI "desktop"
+-Profile optimized for desktops based on balanced profile. It additionaly
++Profile optimized for desktops based on balanced profile. It additionally
+ enables scheduler autogroups for better response of interactive applications.
+ 
+ .TP
+@@ -109,7 +109,7 @@ settings.
+ .TP
+ .BI "virtual\-host"
+ Profile optimized for virtual hosts based on throughput\-performance profile.
+-It additionally enables more aggresive writeback of dirty pages.
++It additionally enables more aggressive writeback of dirty pages.
+ 
+ .SH "FILES"
+ .nf
+--- a/man/tuned-profiles-compat.7
++++ b/man/tuned-profiles-compat.7
+@@ -25,7 +25,7 @@ tuned\-profiles\-compat - description of
+ 
+ .SH DESCRIPTION
+ These profiles are provided for backward compatibility with the tuned-1x.
+-They are no longer mainained and may be dropped anytime in the future.
++They are no longer maintained and may be dropped anytime in the future.
+ It's not recommended to use them for purposes other than backward compatibility.
+ Some of them are only aliases to base tuned profiles. Please do not use the compat
+ profiles on new installations and rather use profiles from base tuned package or
+@@ -69,7 +69,7 @@ with 'noatime' option. All tuned plugins
+ 
+ .TP
+ .BI "enterprise\-storage"
+-Server profile for high disk throughput performace tuning. Disables power
++Server profile for high disk throughput performance tuning. Disables power
+ saving mechanisms and enables deadline IO scheduler. Enables hugepages and
+ disables disk barriers. Disk readahead values are increased. CPU governor is
+ set to performance.
+--- a/man/tuned-profiles-oracle.7
++++ b/man/tuned-profiles-oracle.7
+@@ -31,7 +31,7 @@ The following profiles are provided:
+ .TP
+ .BI "oracle"
+ Profile optimized for Oracle databases based on throughput\-performance profile.
+-It additionaly disables transparent huge pages and modifies some other
++It additionally disables transparent huge pages and modifies some other
+ performance related kernel parameters.
+ 
+ .SH "FILES"
