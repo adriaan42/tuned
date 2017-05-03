@@ -39,6 +39,7 @@ Depends: dbus,
          virt-what,
          ${misc:Depends},
          ${python:Depends}
+Recommends: linux-cpupower
 Description: daemon for monitoring and adaptive tuning of system devices
  The tuned package contains a daemon that tunes system settings dynamically.
  It does so by monitoring the usage of several system components periodically.
