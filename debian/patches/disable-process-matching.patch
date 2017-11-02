@@ -1,0 +1,41 @@
+From: Evgeni Golov <evgeni@debian.org>
+Subject: disable process matching support
+ this was introduced in 5a2ea01f719c096dd8abdf3050e8b34b9d30ce2b
+ but debian has no procfs python module at the moment
+diff --git a/recommend.conf b/recommend.conf
+index 660fbca..2df4756 100644
+--- a/recommend.conf
++++ b/recommend.conf
+@@ -12,8 +12,6 @@
+ # KEYWORD can be:
+ # virt    - for RE to match output of virt-what
+ # system  - for RE to match content of /etc/system-release-cpe
+-# process - for RE to match running processes. It can have arbitrary suffix, all
+-#           process* lines have to match for the PROFILE to match (i.e. the AND operator)
+ # /FILE   - for RE to match content of the FILE, e.g.: '/etc/passwd=.+'. If file doesn't
+ #           exist, its RE will not match.
+
+diff --git a/tuned/utils/commands.py b/tuned/utils/commands.py
+index f8e393f..13b2f5b 100644
+--- a/tuned/utils/commands.py
++++ b/tuned/utils/commands.py
+@@ -6,7 +6,6 @@ import shutil
+ import tuned.consts as consts
+ from configobj import ConfigObj, ConfigObjError
+ import re
+-import procfs
+ from subprocess import *
+ from tuned.exceptions import TunedException
+
+@@ -396,11 +395,6 @@ class commands:
+ 					elif option[0] == "/":
+ 						if not os.path.exists(option) or not re.match(value, self.read_file(option), re.S):
+ 							match = False
+-					elif option[0:7] == "process":
+-						ps = procfs.pidstats()
+-						ps.reload_threads()
+-						if len(ps.find_by_regex(re.compile(value))) == 0:
+-							match = False
+ 				if match:
+ 					# remove the ",.*" suffix
+ 					r = re.compile(r",[^,]*$")
