@@ -8,12 +8,18 @@
 %global git_suffix %{git_date}git%{git_short_commit}
 %endif
 
+#%%global prerelease rc
+#%%global prereleasenum 2
+
+%global prerel1 %{?prerelease:.%{prerelease}%{prereleasenum}}
+%global prerel2 %{?prerelease:-%{prerelease}.%{prereleasenum}}
+
 Summary: A dynamic adaptive system tuning daemon
 Name: tuned
-Version: 2.8.0
-Release: 1%{?with_snapshot:.%{git_suffix}}%{?dist}
+Version: 2.9.0
+Release: 1%{?prerel1}%{?with_snapshot:.%{git_suffix}}%{?dist}
 License: GPLv2+
-Source: https://jskarvad.fedorapeople.org/tuned/download/tuned-%{version}.tar.bz2
+Source: https://github.com/redhat-performance/%{name}/archive/v%{version}%{?prerel2}.tar.gz#/%{name}-%{version}%{?prerel1}.tar.gz
 URL: http://www.tuned-project.org/
 BuildArch: noarch
 BuildRequires: python, systemd, desktop-file-utils
@@ -21,9 +27,12 @@ Requires(post): systemd, virt-what
 Requires(preun): systemd
 Requires(postun): systemd
 Requires: python-decorator, dbus-python, pygobject3-base, python-pyudev
-Requires: virt-what, python-configobj, ethtool, gawk, kernel-tools, hdparm
+Requires: virt-what, python-configobj, ethtool, gawk, hdparm
 Requires: util-linux, python-perf, dbus, polkit, python-linux-procfs
 Requires: python-schedutils
+%if 0%{?fedora} > 22 || 0%{?rhel} > 7
+Recommends: kernel-tools
+%endif
 
 %description
 The tuned package contains a daemon that tunes system settings dynamically.
@@ -118,7 +127,13 @@ Additional tuned profile(s) targeted to Network Function Virtualization (NFV) gu
 Summary: Additional tuned profile(s) targeted to Network Function Virtualization (NFV) host
 Requires: %{name} = %{version}
 Requires: %{name}-profiles-realtime = %{version}
-Requires: tuna, qemu-kvm-tools-rhev
+Requires: tuna
+%if 0%{?fedora} > 22
+Recommends: qemu-kvm-tools-rhev
+%endif
+%if 0%{?rhel} == 7
+Requires: qemu-kvm-tools-rhev
+%endif
 
 %description profiles-nfv-host
 Additional tuned profile(s) targeted to Network Function Virtualization (NFV) host.
@@ -136,7 +151,6 @@ Additional tuned profile(s) targeted to Network Function Virtualization (NFV).
 %package profiles-cpu-partitioning
 Summary: Additional tuned profile(s) optimized for CPU partitioning
 Requires: %{name} = %{version}
-Requires: tuna
 
 %description profiles-cpu-partitioning
 Additional tuned profile(s) optimized for CPU partitioning.
@@ -150,7 +164,7 @@ Additional tuned profiles mainly for backward compatibility with tuned 1.0.
 It can be also used to fine tune your system for specific scenarios.
 
 %prep
-%setup -q
+%setup -q -n %{name}-%{version}%{?prerel2}
 
 
 %build
@@ -196,6 +210,8 @@ fi
 if [ "$1" == 0 ]; then
 # clear persistent storage
   rm -f %{_var}/lib/tuned/*
+# clear temporal storage
+  rm -f /run/tuned/*
 fi
 
 
@@ -259,6 +275,7 @@ fi
 %exclude %{_sysconfdir}/tuned/realtime-virtual-guest-variables.conf
 %exclude %{_sysconfdir}/tuned/realtime-virtual-host-variables.conf
 %exclude %{_sysconfdir}/tuned/cpu-partitioning-variables.conf
+%exclude %{_sysconfdir}/tuned/sap-hana-vmware-variables.conf
 %exclude %{_prefix}/lib/tuned/default
 %exclude %{_prefix}/lib/tuned/desktop-powersave
 %exclude %{_prefix}/lib/tuned/laptop-ac-powersave
@@ -278,9 +295,11 @@ fi
 %exclude %{_prefix}/lib/tuned/cpu-partitioning
 %{_prefix}/lib/tuned
 %dir %{_sysconfdir}/tuned
+%dir %{_sysconfdir}/tuned/recommend.d
 %dir %{_libexecdir}/tuned
 %{_libexecdir}/tuned/defirqaffinity*
 %config(noreplace) %verify(not size mtime md5) %{_sysconfdir}/tuned/active_profile
+%config(noreplace) %verify(not size mtime md5) %{_sysconfdir}/tuned/profile_mode
 %config(noreplace) %{_sysconfdir}/tuned/tuned-main.conf
 %config(noreplace) %verify(not size mtime md5) %{_sysconfdir}/tuned/bootcmdline
 %{_sysconfdir}/dbus-1/system.d/com.redhat.tuned.conf
@@ -333,6 +352,7 @@ fi
 
 %files profiles-sap-hana
 %defattr(-,root,root,-)
+%config(noreplace) %{_sysconfdir}/tuned/sap-hana-vmware-variables.conf
 %{_prefix}/lib/tuned/sap-hana
 %{_prefix}/lib/tuned/sap-hana-vmware
 %{_mandir}/man7/tuned-profiles-sap-hana.7*
@@ -388,6 +408,67 @@ fi
 %{_mandir}/man7/tuned-profiles-compat.7*
 
 %changelog
+* Sun Oct 29 2017 Jaroslav Škarvada <jskarvad@redhat.com> - 2.9.0-1
+- new release
+  - rebased tuned to latest upstream
+    related: rhbz#1467576
+
+* Fri Oct 20 2017 Jaroslav Škarvada <jskarvad@redhat.com> - 2.9.0-0.2.rc2
+- new release
+  - rebased tuned to latest upstream
+    related: rhbz#1467576
+  - fixed expansion of the variables in the 'devices' section
+    related: rhbz#1490399
+  - cpu-partitioning: add no_rebalance_cores= option
+    resolves: rhbz#1497182
+
+* Thu Oct 12 2017 Jaroslav Škarvada <jskarvad@redhat.com> - 2.9.0-0.1.rc1
+- new release
+  - rebased tuned to latest upstream
+    resolves: rhbz#1467576
+  - added recommend.d functionality
+    resolves: rhbz#1459146
+  - recommend: added support for matching of processes
+    resolves: rhbz#1461838
+  - plugin_video: added support for the 'dpm' power method
+    resolves: rhbz#1417659
+  - list available profiles on 'tuned-adm profile'
+    resolves: rhbz#988433
+  - cpu-partitioning: used tuned instead of tuna for cores isolation
+    resolves: rhbz#1442229
+  - inventory: added workaround for pyudev < 0.18
+    resolves: rhbz#1251240
+  - realtime: used skew_tick=1 in kernel cmdline
+    resolves: rhbz#1447938
+  - realtime-virtual-guest: re-assigned kernel thread priorities
+    resolves: rhbz#1452357
+  - bootloader: splitted string for removal from cmdline
+    resolves: rhbz#1461279
+  - network-latency: added skew_tick=1 kernel command line parameter
+    resolves: rhbz#1451073
+  - bootloader: accepted only certain values for initrd_remove_dir
+    resolves: rhbz#1455161
+  - increased udev monitor buffer size, made it configurable
+    resolves: rhbz#1442306
+  - bootloader: don't add nonexistent overlay image to grub.cfg
+    resolves: rhbz#1454340
+  - plugin_cpu: don't log error in execute() if EPB is not supported
+    resolves: rhbz#1443182
+  - sap-hana: fixed description of the sap-hana profiles
+    resolves: rhbz#1482005
+  - plugin_systemd: on full_rollback notify about need of initrd regeneration
+    resolves: rhbz#1469258
+  - don't log errors about missing files on verify with ignore_missing set
+    resolves: rhbz#1451435
+  - plugin_scheduler: improved logging
+    resolves: rhbz#1474961
+  - improved checking if we are rebooting or not
+    resolves: rhbz#1475571
+  - started dbus exports after a profile is applied
+    resolves: rhbz#1443142
+  - sap-hana: changed force_latency to 70
+    resolves: rhbz#1501252
+
 * Fri Apr  7 2017 Jaroslav Škarvada <jskarvad@redhat.com> - 2.8.0-1
 - new release
   - rebase tuned to latest upstream

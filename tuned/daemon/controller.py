@@ -1,6 +1,7 @@
 from tuned import exports
 import tuned.logs
 import tuned.exceptions
+from tuned.exceptions import TunedException
 import threading
 import tuned.consts as consts
 from tuned.utils.commands import commands
@@ -27,9 +28,12 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 		Controller main loop. The call is blocking.
 		"""
 		log.info("starting controller")
-		self.start()
+		res = self.start()
+		daemon = self._global_config.get_bool(consts.CFG_DAEMON, consts.CFG_DEF_DAEMON)
+		if not res and daemon:
+			exports.start()
 
-		if self._global_config.get_bool(consts.CFG_DAEMON, consts.CFG_DEF_DAEMON):
+		if daemon:
 			self._terminate.clear()
 			# we have to pass some timeout, otherwise signals will not work
 			while not self._cmd.wait(self._terminate, 3600):
@@ -79,19 +83,15 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 		else:
 			return self.stop() and self.start()
 
-	@exports.export("s", "(bs)")
-	def switch_profile(self, profile_name, caller = None):
-		if caller == "":
-			return (False, "Unauthorized")
+	def _switch_profile(self, profile_name, manual):
 		was_running = self._daemon.is_running()
 		msg = "OK"
 		success = True
 		reapply = False
 		try:
 			if was_running:
-				# stop(switch_profile = True), due to profile switch
-				self._daemon.stop(True)
-			self._daemon.set_profile(profile_name)
+				self._daemon.stop(profile_switch = True)
+			self._daemon.set_profile(profile_name, manual)
 		except tuned.exceptions.TunedException as e:
 			success = False
 			msg = str(e)
@@ -110,6 +110,19 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 
 		return (success, msg)
 
+	@exports.export("s", "(bs)")
+	def switch_profile(self, profile_name, caller = None):
+		if caller == "":
+			return (False, "Unauthorized")
+		return self._switch_profile(profile_name, True)
+
+	@exports.export("", "(bs)")
+	def auto_profile(self, caller = None):
+		if caller == "":
+			return (False, "Unauthorized")
+		profile_name = self.recommend_profile()
+		return self._switch_profile(profile_name, False)
+
 	@exports.export("", "s")
 	def active_profile(self, caller = None):
 		if caller == "":
@@ -119,6 +132,24 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 		else:
 			return ""
 
+	@exports.export("", "(ss)")
+	def profile_mode(self, caller = None):
+		if caller == "":
+			return "unknown", "Unauthorized"
+		manual = self._daemon.manual
+		if manual is None:
+			# This means no profile is applied. Check the preset value.
+			try:
+				profile, manual = self._cmd.get_active_profile()
+				if manual is None:
+					manual = profile is not None
+			except TunedException as e:
+				mode = "unknown"
+				error = str(e)
+				return mode, error
+		mode = consts.ACTIVE_PROFILE_MANUAL if manual else consts.ACTIVE_PROFILE_AUTO
+		return mode, ""
+
 	@exports.export("", "b")
 	def disable(self, caller = None):
 		if caller == "":
@@ -126,7 +157,7 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 		if self._daemon.is_running():
 			self._daemon.stop()
 		if self._daemon.is_enabled():
-			self._daemon.set_profile(None, save_instantly=True)
+			self._daemon.set_profile(None, None, save_instantly=True)
 		return True
 
 	@exports.export("", "b")

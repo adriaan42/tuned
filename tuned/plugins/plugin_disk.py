@@ -180,6 +180,7 @@ class DiskPlugin(hotplug.Plugin):
 				(rc, out) = self._cmd.execute(["hdparm", "-B%d" % new_power_level, "/dev/%s" % device], no_errors = [errno.ENOENT])
 				self._update_errcnt(rc, False)
 		elif instance._spindown_change_delayed[device] and self._drive_spinning(device):
+			new_spindown_level = self._spindown_levels[idle["level"]]
 			self._change_spindown(instance, device, new_spindown_level)
 
 		log.debug("%s load: read %0.2f, write %0.2f" % (device, stats["read"], stats["write"]))
@@ -236,11 +237,11 @@ class DiskPlugin(hotplug.Plugin):
 		return value
 
 	@command_get("elevator")
-	def _get_elevator(self, device):
+	def _get_elevator(self, device, ignore_missing=False):
 		sys_file = self._elevator_file(device)
 		# example of scheduler file content:
 		# noop deadline [cfq]
-		return self._cmd.get_active_option(self._cmd.read_file(sys_file))
+		return self._cmd.get_active_option(self._cmd.read_file(sys_file, no_error=ignore_missing))
 
 	@command_set("apm", per_device=True)
 	def _set_apm(self, value, device, sim):
@@ -253,7 +254,7 @@ class DiskPlugin(hotplug.Plugin):
 			return None
 
 	@command_get("apm")
-	def _get_apm(self, device):
+	def _get_apm(self, device, ignore_missing=False):
 		value = None
 		err = False
 		(rc, out) = self._cmd.execute(["hdparm", "-B", "/dev/" + device], no_errors = [errno.ENOENT])
@@ -283,7 +284,7 @@ class DiskPlugin(hotplug.Plugin):
 			return None
 
 	@command_get("spindown")
-	def _get_spindown(self, device):
+	def _get_spindown(self, device, ignore_missing=False):
 		# There's no way how to get current/old spindown value, hardcoding vendor specific 253
 		return 253
 
@@ -307,9 +308,9 @@ class DiskPlugin(hotplug.Plugin):
 		return val
 
 	@command_get("readahead")
-	def _get_readahead(self, device):
+	def _get_readahead(self, device, ignore_missing=False):
 		sys_file = self._readahead_file(device)
-		value = self._cmd.read_file(sys_file).strip()
+		value = self._cmd.read_file(sys_file, no_error=ignore_missing).strip()
 		if len(value) == 0:
 			return None
 		return int(value)
@@ -344,10 +345,11 @@ class DiskPlugin(hotplug.Plugin):
 		return value
 
 	@command_get("scheduler_quantum")
-	def _get_scheduler_quantum(self, device):
+	def _get_scheduler_quantum(self, device, ignore_missing=False):
 		sys_file = self._scheduler_quantum_file(device)
-		value = self._cmd.read_file(sys_file).strip()
+		value = self._cmd.read_file(sys_file, no_error=ignore_missing).strip()
 		if len(value) == 0:
-			log.info("disk_scheduler_quantum option is not supported by this HW")
+			if not ignore_missing:
+				log.info("disk_scheduler_quantum option is not supported by this HW")
 			return None
 		return int(value)

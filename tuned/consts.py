@@ -1,7 +1,8 @@
 GLOBAL_CONFIG_FILE = "/etc/tuned/tuned-main.conf"
 ACTIVE_PROFILE_FILE = "/etc/tuned/active_profile"
+PROFILE_MODE_FILE = "/etc/tuned/profile_mode"
 PROFILE_FILE = "tuned.conf"
-AUTODETECT_FILE = "recommend.conf"
+RECOMMEND_CONF_FILE = "/etc/tuned/recommend.conf"
 DAEMONIZE_PARENT_TIMEOUT = 5
 NAMESPACE = "com.redhat.tuned"
 DBUS_BUS = NAMESPACE
@@ -12,6 +13,7 @@ DEFAULT_STORAGE_FILE = "/run/tuned/save.pickle"
 LOAD_DIRECTORIES = ["/usr/lib/tuned", "/etc/tuned"]
 PERSISTENT_STORAGE_DIR = "/var/lib/tuned"
 PLUGIN_MAIN_UNIT_NAME = "main"
+RECOMMEND_DIRECTORIES = ["/usr/lib/tuned/recommend.d", "/etc/tuned/recommend.d"]
 
 TMP_FILE_SUFFIX = ".tmp"
 # max. number of consecutive errors to give up
@@ -62,6 +64,7 @@ CFG_UPDATE_INTERVAL = "update_interval"
 CFG_RECOMMEND_COMMAND = "recommend_command"
 CFG_REAPPLY_SYSCTL = "reapply_sysctl"
 CFG_DEFAULT_INSTANCE_PRIORITY = "default_instance_priority"
+CFG_UDEV_BUFFER_SIZE = "udev_buffer_size"
 
 # no_daemon mode
 CFG_DEF_DAEMON = True
@@ -77,6 +80,8 @@ CFG_DEF_RECOMMEND_COMMAND = True
 CFG_DEF_REAPPLY_SYSCTL = True
 # default instance priority
 CFG_DEF_DEFAULT_INSTANCE_PRIORITY = 0
+# default pyudev.Monitor buffer size
+CFG_DEF_UDEV_BUFFER_SIZE = 1024 * 1024
 
 PATH_CPU_DMA_LATENCY = "/dev/cpu_dma_latency"
 
@@ -99,3 +104,8 @@ STR_VERIFY_PROFILE_FAIL = "verify: failed: '%s'"
 
 # timout for tuned-adm operations in seconds
 ADMIN_TIMEOUT = 600
+
+# Strings for /etc/tuned/profile_mode specifying if the active profile
+# was set automatically or manually
+ACTIVE_PROFILE_AUTO = "auto"
+ACTIVE_PROFILE_MANUAL = "manual"

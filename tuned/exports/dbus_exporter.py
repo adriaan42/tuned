@@ -56,6 +56,9 @@ class DBusExporter(interfaces.ExporterInterface):
 	def object_name(self):
 		return self._object_name
 
+	def running(self):
+		return self._thread is not None
+
 	def export(self, method, in_signature, out_signature):
 		if not inspect.ismethod(method):
 			raise Exception("Only bound methods can be exported.")
@@ -129,10 +132,15 @@ class DBusExporter(interfaces.ExporterInterface):
 		self._dbus_object_cls = cls
 
 	def start(self):
+		if self.running():
+			return
 		if self._dbus_object_cls is None:
 			self._construct_dbus_object_class()
 
 		self.stop()
+		bus = dbus.SystemBus()
+		bus_name = dbus.service.BusName(self._bus_name, bus)
+		self._bus_object = self._dbus_object_cls(bus, self._object_name, bus_name)
 		self._thread = threading.Thread(target=self._thread_code)
 		self._thread.start()
 
@@ -143,10 +151,6 @@ class DBusExporter(interfaces.ExporterInterface):
 			self._thread = None
 
 	def _thread_code(self):
-		bus = dbus.SystemBus()
-		bus_name = dbus.service.BusName(self._bus_name, bus)
-		self._bus_object = self._dbus_object_cls(bus, self._object_name, bus_name)
-
 		self._main_loop.run()
 		del self._bus_object
 		self._bus_object = None

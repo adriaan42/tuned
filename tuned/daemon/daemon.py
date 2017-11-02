@@ -6,12 +6,14 @@ from tuned.exceptions import TunedException
 from tuned.profiles.exceptions import InvalidProfileException
 import tuned.consts as consts
 from tuned.utils.commands import commands
+from tuned import exports
+import re
 
 log = tuned.logs.get()
 
 
 class Daemon(object):
-	def __init__(self, unit_manager, profile_loader, profile_name=None, config=None, application=None):
+	def __init__(self, unit_manager, profile_loader, profile_names=None, config=None, application=None):
 		log.debug("initializing daemon")
 		self._daemon = consts.CFG_DEF_DAEMON
 		self._sleep_interval = int(consts.CFG_DEF_SLEEP_INTERVAL)
@@ -34,7 +36,7 @@ class Daemon(object):
 		self._sleep_cycles = self._update_interval // self._sleep_interval
 		log.info("using sleep interval of %d second(s)" % self._sleep_interval)
 		if self._dynamic_tuning:
-			log.info("dynamic tuning is enabled (can be overriden by plugins)")
+			log.info("dynamic tuning is enabled (can be overridden by plugins)")
 			log.info("using update interval of %d second(s) (%d times of the sleep interval)" % (self._sleep_cycles * self._sleep_interval, self._sleep_cycles))
 
 		self._unit_manager = unit_manager
@@ -42,7 +44,7 @@ class Daemon(object):
 		self._init_threads()
 		self._cmd = commands()
 		try:
-			self._init_profile(profile_name)
+			self._init_profile(profile_names)
 		except TunedException as e:
 			log.error("Cannot set initial profile. No tunings will be enabled: %s" % e)
 
@@ -56,36 +58,52 @@ class Daemon(object):
 		self._not_used.set()
 		self._profile_applied = threading.Event()
 
-	def _init_profile(self, profile_name):
-		if profile_name is None:
-			profile_name = self._get_active_profile()
+	def _init_profile(self, profile_names):
+		manual = True
+		if profile_names is None:
+			(profile_names, manual) = self._get_startup_profile()
+			if profile_names is None:
+				log.info("No profile is preset, running in manual mode. No profile will be enabled.")
+		# Passed through '-p' cmdline option
+		elif profile_names == "":
+			log.info("No profile will be enabled.")
 
 		self._profile = None
-		self.set_profile(profile_name)
+		self._manual = None
+		self.set_profile(profile_names, manual)
 
-	def set_profile(self, profile_name, save_instantly=False):
+	def set_profile(self, profile_names, manual, save_instantly=False):
 		if self.is_running():
-			raise TunedException(self._notify_profile_changed(profile_name, False, "Cannot set profile while the daemon is running."))
+			raise TunedException(self._notify_profile_changed(profile_names, False, "Cannot set profile while the daemon is running."))
 
-		if profile_name == "" or profile_name is None:
+		if profile_names == "" or profile_names is None:
 			self._profile = None
-		elif profile_name not in self.profile_loader.profile_locator.get_known_names():
-
-			raise TunedException(self._notify_profile_changed(profile_name, False, "Requested profile '%s' doesn't exist." % profile_name))
+			self._manual = manual
 		else:
+			profile_list = profile_names.split()
+			for profile in profile_list:
+				if profile not in self.profile_loader.profile_locator.get_known_names():
+					raise TunedException(self._notify_profile_changed(\
+							profile_names, False,\
+							"Requested profile '%s' doesn't exist." % profile))
 			try:
-				self._profile = self._profile_loader.load(profile_name)
+				self._profile = self._profile_loader.load(profile_names)
+				self._manual = manual
 			except InvalidProfileException as e:
-				raise TunedException(self._notify_profile_changed(profile_name, False, "Cannot load profile '%s': %s" % (profile_name, e)))
+				raise TunedException(self._notify_profile_changed(profile_names, False, "Cannot load profile(s) '%s': %s" % (profile_names, e)))
 
 		if save_instantly:
-			if profile_name is None:
-				profile_name = ""
-			self._save_active_profile(profile_name)
+			if profile_names is None:
+				profile_names = ""
+			self._save_active_profile(profile_names, manual)
 
 	@property
 	def profile(self):
 		return self._profile
+
+	@property
+	def manual(self):
+		return self._manual
 
 	@property
 	def profile_loader(self):
@@ -93,20 +111,31 @@ class Daemon(object):
 
 	# send notification when profile is changed (everything is setup) or if error occured
 	# result: True - OK, False - error occured
-	def _notify_profile_changed(self, profile_name, result, errstr):
+	def _notify_profile_changed(self, profile_names, result, errstr):
 		if self._application is not None and self._application._dbus_exporter is not None:
-			self._application._dbus_exporter.send_signal(consts.DBUS_SIGNAL_PROFILE_CHANGED, profile_name, result, errstr)
+			self._application._dbus_exporter.send_signal(consts.DBUS_SIGNAL_PROFILE_CHANGED, profile_names, result, errstr)
 		return errstr
+
+	def _full_rollback_required(self):
+		retcode, out = self._cmd.execute(["systemctl", "is-system-running"], no_errors = [0])
+		if retcode < 0:
+			return False
+		if out[:8] == "stopping":
+			return False
+		retcode, out = self._cmd.execute(["systemctl", "list-jobs"], no_errors = [0])
+		return re.search(r"\b(shutdown|reboot|halt|poweroff)\.target.*start", out) is None
 
 	def _thread_code(self):
 		if self._profile is None:
 			raise TunedException("Cannot start the daemon without setting a profile.")
 
 		self._unit_manager.create(self._profile.units)
-		self._save_active_profile(self._profile.name)
+		self._save_active_profile(self._profile.name, self._manual)
 		self._unit_manager.start_tuning()
 		self._profile_applied.set()
 		log.info("static tuning from profile '%s' applied" % self._profile.name)
+		if self._daemon:
+			exports.start()
 		self._notify_profile_changed(self._profile.name, True, "OK")
 
 		if self._daemon:
@@ -143,49 +172,34 @@ class Daemon(object):
 			# stopped by user and in such case do full cleanup, without systemd never
 			# do full cleanup
 			full_rollback = False
-			retcode, out = self._cmd.execute(["systemctl", "is-system-running"], no_errors = [0])
-			if retcode >= 0:
-				if out[:8] == "stopping":
-					log.info("terminating Tuned due to system shutdown / reboot")
-				else:
-					log.info("terminating Tuned, rolling back all changes")
-					full_rollback = True
+			if self._full_rollback_required():
+				log.info("terminating Tuned, rolling back all changes")
+				full_rollback = True
+			else:
+				log.info("terminating Tuned due to system shutdown / reboot")
 		if self._daemon:
 			self._unit_manager.stop_tuning(full_rollback)
 		self._unit_manager.destroy_all()
 
-	def _save_active_profile(self, profile_name):
+	def _save_active_profile(self, profile_names, manual):
 		try:
-			with open(consts.ACTIVE_PROFILE_FILE, "w") as f:
-				f.write(profile_name + "\n")
-		except (OSError,IOError) as e:
-			log.error("Cannot write active profile into %s: %s" % (consts.ACTIVE_PROFILE_FILE, str(e)))
+			self._cmd.save_active_profile(profile_names, manual)
+		except TunedException as e:
+			log.error(str(e))
 
-	def _set_recommended_profile(self):
-		log.info("no profile preset, checking what is recommended for your configuration")
+	def _get_recommended_profile(self):
+		log.info("Running in automatic mode, checking what profile is recommended for your configuration.")
 		profile = self._cmd.recommend_profile(hardcoded = not self._recommend_command)
-		log.info("using '%s' profile and setting it as active" % profile)
-		self._save_active_profile(profile)
+		log.info("Using '%s' profile" % profile)
 		return profile
 
-	def _get_active_profile(self):
-		try:
-			with open(consts.ACTIVE_PROFILE_FILE, "r") as f:
-				profile = f.read().strip()
-				if profile == "":
-					profile = self._set_recommended_profile()
-				return profile
-		except IOError as e:
-			if e.errno == errno.ENOENT:
-				# No such file or directory
-				profile = self._set_recommended_profile()
-			else:
-				profile = consts.DEFAULT_PROFILE
-				log.error("error reading active profile from '%s', falling back to '%s' profile" % (consts.ACTIVE_PROFILE_FILE, profile))
-			return profile
-		except (OSError, EOFError) as e:
-			log.error("cannot read active profile, falling back to '%s' profile" % consts.DEFAULT_PROFILE)
-			return consts.DEFAULT_PROFILE
+	def _get_startup_profile(self):
+		profile, manual = self._cmd.get_active_profile()
+		if manual is None:
+			manual = profile is not None
+		if not manual:
+			profile = self._get_recommended_profile()
+		return profile, manual
 
 	def is_enabled(self):
 		return self._profile is not None
@@ -233,7 +247,7 @@ class Daemon(object):
 	def stop(self, profile_switch = False):
 		if not self.is_running():
 			return False
-		log.info("stopping tunning")
+		log.info("stopping tuning")
 		if profile_switch:
 			self._terminate_profile_switch.set()
 		self._terminate.set()

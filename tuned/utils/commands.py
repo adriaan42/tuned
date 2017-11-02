@@ -6,7 +6,9 @@ import shutil
 import tuned.consts as consts
 from configobj import ConfigObj, ConfigObjError
 import re
+import procfs
 from subprocess import *
+from tuned.exceptions import TunedException
 
 log = tuned.logs.get()
 
@@ -157,9 +159,11 @@ class commands:
 		try:
 			log.debug("copying file '%s' to '%s'" % (src, dst))
 			shutil.copy(src, dst)
+			return True
 		except IOError as e:
 			if not no_error:
 				log.error("cannot copy file '%s' to '%s': %s" % (src, dst, e))
+			return False
 
 	def replace_in_file(self, f, pattern, repl):
 		data = self.read_file(f)
@@ -197,7 +201,7 @@ class commands:
 	# "no_errors" can be list of return codes not treated as errors, if 0 is in no_errors, it means any error
 	# returns (retcode, out), where retcode is exit code of the executed process or -errno if
 	# OSError or IOError exception happened
-	def execute(self, args, shell = False, cwd = None, no_errors = []):
+	def execute(self, args, shell = False, cwd = None, no_errors = [], return_err = False):
 		retcode = 0
 		if self._environment is None:
 			self._environment = os.environ.copy()
@@ -205,6 +209,7 @@ class commands:
 
 		self._debug("Executing %s." % str(args))
 		out = ""
+		err_msg = None
 		try:
 			proc = Popen(args, stdout = PIPE, stderr = PIPE, env = self._environment, shell = shell, cwd = cwd, close_fds = True)
 			out, err = proc.communicate()
@@ -214,12 +219,19 @@ class commands:
 				err_out = err[:-1]
 				if len(err_out) == 0:
 					err_out = out[:-1]
-				self._error("Executing %s error: %s" % (args[0], err_out))
+				err_msg = "Executing %s error: %s" % (args[0], err_out)
+				if not return_err:
+					self._error(err_msg)
 		except (OSError, IOError) as e:
 			retcode = -e.errno if e.errno is not None else -1
 			if not abs(retcode) in no_errors and not 0 in no_errors:
-				self._error("Executing %s error: %s" % (args[0], e))
-		return retcode, out
+				err_msg = "Executing %s error: %s" % (args[0], e)
+				if not return_err:
+					self._error(err_msg)
+		if return_err:
+			return retcode, out, err_msg
+		else:
+			return retcode, out
 
 	# Helper for parsing kernel options like:
 	# [always] never
@@ -260,7 +272,9 @@ class commands:
 	# Unpacks CPU list, i.e. 1-3 will be converted to 1, 2, 3, supports
 	# hexmasks that needs to be prefixed by "0x". Hexmasks can have commas,
 	# which will be removed. If combining hexmasks with CPU list they need
-	# to be separated by ",,", e.g.: 0-3, 0xf,, 6
+	# to be separated by ",,", e.g.: 0-3, 0xf,, 6. It also supports negation
+	# cpus by specifying "^" or "!", e.g.: 0-5, ^3, will output the list as
+	# "0,1,2,4,5" (excluding 3). Note: negation supports only cpu numbers.
 	def cpulist_unpack(self, l):
 		rl = []
 		if l is None:
@@ -270,6 +284,7 @@ class commands:
 		else:
 			ll = str(l).split(",")
 		ll2 = []
+		negation_list = []
 		hexmask = False
 		hv = ""
 		# Remove commas from hexmasks
@@ -286,6 +301,8 @@ class commands:
 				if sv[0:2].lower() == "0x":
 					hexmask = True
 					hv = sv
+				elif sv and (sv[0] == "^" or sv[0] == "!"):
+					negation_list.append(int(sv[1:]))
 				else:
 					if len(sv) > 0:
 						ll2.append(sv)
@@ -303,7 +320,13 @@ class commands:
 						rl.append(int(vl[0]))
 				except ValueError:
 					return []
-		return sorted(list(set(rl)))
+		cpu_list = sorted(list(set(rl)))
+
+		# Remove negated cpus after expanding
+		for cpu in negation_list:
+			if cpu in cpu_list:
+				cpu_list.remove(cpu)
+		return cpu_list
 
 	# Packs CPU list, i.e. 1, 2, 3  will be converted to 1-3. It unpacks the
 	# CPU list through cpulist_unpack first, so see its description about the
@@ -352,35 +375,64 @@ class commands:
 		s = s.zfill(ls)
 		return ",".join(s[i:i + 8] for i in range(0, len(s), 8))
 
+	def process_recommend_file(self, fname):
+		matching_profile = None
+		try:
+			if not os.path.isfile(fname):
+				return None
+			config = ConfigObj(fname, list_values = False, interpolation = False)
+			for section in config.keys():
+				match = True
+				for option in config[section].keys():
+					value = config[section][option]
+					if value == "":
+						value = r"^$"
+					if option == "virt":
+						if not re.match(value, self.execute("virt-what")[1], re.S):
+							match = False
+					elif option == "system":
+						if not re.match(value, self.read_file(consts.SYSTEM_RELEASE_FILE), re.S):
+							match = False
+					elif option[0] == "/":
+						if not os.path.exists(option) or not re.match(value, self.read_file(option), re.S):
+							match = False
+					elif option[0:7] == "process":
+						ps = procfs.pidstats()
+						ps.reload_threads()
+						if len(ps.find_by_regex(re.compile(value))) == 0:
+							match = False
+				if match:
+					# remove the ",.*" suffix
+					r = re.compile(r",[^,]*$")
+					matching_profile = r.sub("", section)
+					break
+		except (IOError, OSError, ConfigObjError) as e:
+			log.error("error processing '%s', %s" % (fname, e))
+		return matching_profile
+
 	def recommend_profile(self, hardcoded = False):
 		profile = consts.DEFAULT_PROFILE
 		if hardcoded:
 			return profile
-		r = re.compile(r",[^,]*$")
-		for f in consts.LOAD_DIRECTORIES:
+		matching = self.process_recommend_file(consts.RECOMMEND_CONF_FILE)
+		if matching is not None:
+			return matching
+		files = {}
+		for directory in consts.RECOMMEND_DIRECTORIES:
+			contents = []
 			try:
-				fname = os.path.join(f, consts.AUTODETECT_FILE)
-				config = ConfigObj(fname, list_values = False, interpolation = False)
-				for section in reversed(config.keys()):
-					match = True
-					for option in config[section].keys():
-						value = config[section][option]
-						if value == "":
-							value = r"^$"
-						if option == "virt":
-							if not re.match(value, self.execute("virt-what")[1], re.S):
-								match = False
-						elif option == "system":
-							if not re.match(value, self.read_file(consts.SYSTEM_RELEASE_FILE), re.S):
-								match = False
-						elif option[0] == "/":
-							if not os.path.exists(option) or not re.match(value, self.read_file(option), re.S):
-								match = False
-					if match:
-						# remove the ",.*" suffix
-						profile = r.sub("", section)
-			except (IOError, OSError, ConfigObjError) as e:
-				log.error("error parsing '%s', %s" % (fname, e))
+				contents = os.listdir(directory)
+			except OSError as e:
+				if e.errno != errno.ENOENT:
+					log.error("error accessing %s: %s" % (directory, e))
+			for name in contents:
+				path = os.path.join(directory, name)
+				files[name] = path
+		for name in sorted(files.keys()):
+			path = files[name]
+			matching = self.process_recommend_file(path)
+			if matching is not None:
+				return matching
 		return profile
 
 	# Do not make balancing on patched Python 2 interpreter (rhbz#1028122).
@@ -391,3 +443,67 @@ class commands:
 			return terminate.wait(time, False)
 		except:
 			return terminate.wait(time)
+
+	def get_size(self, s):
+		s = str(s).strip().upper()
+		for unit in ["KB", "MB", "GB", ""]:
+			unit_ix = s.rfind(unit)
+			if unit_ix == -1:
+				continue
+			try:
+				val = int(s[:unit_ix])
+				u = s[unit_ix:]
+				if u == "KB":
+					val *= 1024
+				elif u == "MB":
+					val *= 1024 * 1024
+				elif u == "GB":
+					val *= 1024 * 1024 * 1024
+				elif u != "":
+					val = None
+				return val
+			except ValueError:
+				return None
+
+	def get_active_profile(self):
+		profile_name = ""
+		mode = ""
+		try:
+			with open(consts.ACTIVE_PROFILE_FILE, "r") as f:
+				profile_name = f.read().strip()
+		except IOError as e:
+			if e.errno != errno.ENOENT:
+				raise TunedException("Failed to read active profile: %s" % e)
+		except (OSError, EOFError) as e:
+			raise TunedException("Failed to read active profile: %s" % e)
+		try:
+			with open(consts.PROFILE_MODE_FILE, "r") as f:
+				mode = f.read().strip()
+				if mode not in ["", consts.ACTIVE_PROFILE_AUTO, consts.ACTIVE_PROFILE_MANUAL]:
+					raise TunedException("Invalid value in file %s." % consts.PROFILE_MODE_FILE)
+		except IOError as e:
+			if e.errno != errno.ENOENT:
+				raise TunedException("Failed to read profile mode: %s" % e)
+		except (OSError, EOFError) as e:
+			raise TunedException("Failed to read profile mode: %s" % e)
+		if mode == "":
+			manual = None
+		else:
+			manual = mode == consts.ACTIVE_PROFILE_MANUAL
+		if profile_name == "":
+			profile_name = None
+		return (profile_name, manual)
+
+	def save_active_profile(self, profile_name, manual):
+		try:
+			with open(consts.ACTIVE_PROFILE_FILE, "w") as f:
+				if profile_name is not None:
+					f.write(profile_name + "\n")
+		except (OSError,IOError) as e:
+			raise TunedException("Failed to save active profile: %s" % e.strerror)
+		try:
+			with open(consts.PROFILE_MODE_FILE, "w") as f:
+				mode = consts.ACTIVE_PROFILE_MANUAL if manual else consts.ACTIVE_PROFILE_AUTO
+				f.write(mode + "\n")
+		except (OSError,IOError) as e:
+			raise TunedException("Failed to save profile mode: %s" % e.strerror)

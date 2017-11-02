@@ -61,10 +61,15 @@ def verify(shouldbemask):
 	# now verify each /proc/irq/$num/smp_affinity
 	interruptdirs = [ f for f in os.listdir(irqpath) if os.path.isdir(os.path.join(irqpath,f)) ]
 	# IRQ 2 - cascaded signals from IRQs 8-15 (any devices configured to use IRQ 2 will actually be using IRQ 9)
-	interruptdirs.remove("2")
+	try:
+		interruptdirs.remove("2")
+	except ValueError:
+		pass
 	# IRQ 0 - system timer (cannot be changed)
-	interruptdirs.remove("0")
-
+	try:
+		interruptdirs.remove("0")
+	except ValueError:
+		pass
 	for i in interruptdirs:
 		inplacemask = 0
 		fname = irqpath + i + "/smp_affinity"
@@ -112,22 +117,34 @@ fo.close()
 interruptdirs = [ f for f in os.listdir(irqpath) if os.path.isdir(os.path.join(irqpath,f)) ]
 
 # IRQ 2 - cascaded signals from IRQs 8-15 (any devices configured to use IRQ 2 will actually be using IRQ 9)
-interruptdirs.remove("2")
+try:
+	interruptdirs.remove("2")
+except ValueError:
+	pass
 # IRQ 0 - system timer (cannot be changed)
-interruptdirs.remove("0")
+try:
+	interruptdirs.remove("0")
+except ValueError:
+	pass
 
+ret = 0
 for i in interruptdirs:
 	fname = irqpath + i + "/smp_affinity"
 	cpulist = parse_def_affinity(fname)
 	mask = 0
-	for i in cpulist:
-		mask = mask | 1 << i;
-	for i in fields:
+	for j in cpulist:
+		mask = mask | 1 << j;
+	for j in fields:
 		if sys.argv[1] == "add":
-			mask = mask | 1 << int(i);
+			mask = mask | 1 << int(j);
 		elif sys.argv[1] == "remove":
-			mask = mask & ~(1 << int(i));
+			mask = mask & ~(1 << int(j));
 	string = get_cpumask(mask)
-	fo = open(fname, "wb")
-	fo.write(string)
-	fo.close()
+	try:
+		fo = open(fname, "wb")
+		fo.write(string)
+		fo.close()
+	except IOError as e:
+		sys.stderr.write('Failed to set smp_affinity for IRQ %s: %s\n' % (str(i), str(e)))
+		ret = 1
+sys.exit(ret)

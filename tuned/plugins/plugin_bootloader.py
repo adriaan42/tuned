@@ -72,8 +72,9 @@ class BootloaderPlugin(base.Plugin):
 			if op == "+" and vals != "":
 				cmdline += " " + vals
 			elif op == "-" and vals != "":
-				regex = re.escape(vals)
-				cmdline = re.sub(r"(\A|\s)" + regex + r"(?=\Z|\s)", r"", cmdline)
+				for p in vals.split():
+					regex = re.escape(p)
+					cmdline = re.sub(r"(\A|\s)" + regex + r"(?=\Z|\s)", r"", cmdline)
 			else:
 				cmdline += " " + val
 		cmdline = cmdline.strip()
@@ -187,7 +188,8 @@ class BootloaderPlugin(base.Plugin):
 	def _install_initrd(self, img):
 		log.info("installing initrd image as '%s'" % self._initrd_dst_img_val)
 		img_name = os.path.basename(self._initrd_dst_img_val)
-		self._cmd.copy(img, self._initrd_dst_img_val)
+		if not self._cmd.copy(img, self._initrd_dst_img_val):
+			return False
 		self.update_grub2_cfg = True
 		curr_cmdline = self._cmd.read_file("/proc/cmdline").rstrip()
 		initrd_grubpath = "/"
@@ -197,6 +199,7 @@ class BootloaderPlugin(base.Plugin):
 			if len(path) < lc:
 				initrd_grubpath = path
 		self._initrd_val = os.path.join(initrd_grubpath, img_name)
+		return True
 
 	@command_custom("grub2_cfg_file")
 	def _grub2_cfg_file(self, enabling, value, verify, ignore_missing):
@@ -224,7 +227,7 @@ class BootloaderPlugin(base.Plugin):
 		if verify:
 			return None
 		if enabling and value is not None:
-			self._initrd_remove_dir = value
+			self._initrd_remove_dir = self._cmd.get_bool(value) == "1"
 
 	@command_custom("initrd_add_img", per_device = False, priority = 10)
 	def _initrd_add_img(self, enabling, value, verify, ignore_missing):
@@ -236,7 +239,8 @@ class BootloaderPlugin(base.Plugin):
 			self._init_initrd_dst_img(src_img)
 			if src_img == "":
 				return False
-			self._install_initrd(src_img)
+			if not self._install_initrd(src_img):
+				return False
 
 	@command_custom("initrd_add_dir", per_device = False, priority = 10)
 	def _initrd_add_dir(self, enabling, value, verify, ignore_missing):

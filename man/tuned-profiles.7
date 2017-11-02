@@ -28,7 +28,7 @@ These are the base profiles which are mostly shipped in the base tuned
 package. They are targeted to various goals. Mostly they provide
 performance optimizations but there are also profiles targeted to
 low power consumption, low latency and others. You can mostly deduce the
-purpose of the profile by its name or you can see full description bellow.
+purpose of the profile by its name or you can see full description below.
 
 The profiles are stored in subdirectories below \fI/usr/lib/tuned\fP. If you
 need to customize the profiles, you can copy them to \fI/etc/tuned\fP and modify
@@ -49,7 +49,7 @@ At the moment we're providing the following pre\-defined profiles:
 .BI "balanced"
 It is the default profile. It provides balanced power saving and performance.
 At the moment it enables CPU and disk plugins of tuned and it makes sure the
-ondemand governor is active (if supported by the current cpufreq driver).
+conservative governor is active (if supported by the current cpufreq driver).
 It enables ALPM power saving for SATA host adapters and sets the link power
 management policy to medium_power. It also sets the CPU energy performance
 bias to normal. It also enables AC97 audio power saving or (it depends on
@@ -61,10 +61,9 @@ configures it to automatic power saving.
 .BI "powersave"
 Maximal power saving, at the moment it enables USB autosuspend (in case
 environment variable USB_AUTOSUSPEND is set to 1), enables ALPM power saving
-for SATA host adapters and sets the link power manamgent policy to min_power.
-It also enables WiFi power saving, enables multi core power savings scheduler
-for low wakeup systems and makes sure the ondemand governor is active (if
-supported by the current cpufreq driver). It sets the CPU energy performance
+for SATA host adapters and sets the link power management policy to min_power.
+It also enables WiFi power saving and makes sure the ondemand governor is active
+(if supported by the current cpufreq driver). It sets the CPU energy performance
 bias to powersave. It also enables AC97 audio power saving or (it depends on
 your system) HDA\-Intel power savings (with 10 seconds timeout). In case your
 system contains supported Radeon graphics card (with enabled KMS) it
@@ -81,23 +80,23 @@ performance bias is set to performance. Disk readahead values are increased.
 .TP
 .BI "latency\-performance"
 Profile for low latency performance tuning. Disables power saving mechanisms.
-CPU governor is set to performance andlocked to the low C states (by PM QoS).
+CPU governor is set to performance and locked to the low C states (by PM QoS).
 CPU energy performance bias to performance.
 
 .TP
 .BI "network\-throughput"
 Profile for throughput network tuning. It is based on the throughput\-performance
-profile. It additionaly increases kernel network buffers.
+profile. It additionally increases kernel network buffers.
 
 .TP
 .BI "network\-latency"
 Profile for low latency network tuning. It is based on the latency\-performance
-profile. It additionaly disables transparent hugepages, NUMA balancing and
+profile. It additionally disables transparent hugepages, NUMA balancing and
 tunes several other network related sysctl parameters.
 
 .TP
 .BI "desktop"
-Profile optimized for desktops based on balanced profile. It additionaly
+Profile optimized for desktops based on balanced profile. It additionally
 enables scheduler autogroups for better response of interactive applications.
 
 .TP
@@ -109,10 +108,10 @@ settings.
 .TP
 .BI "virtual\-host"
 Profile optimized for virtual hosts based on throughput\-performance profile.
-It additionally enables more aggresive writeback of dirty pages.
+It additionally enables more aggressive writeback of dirty pages.
 
 .SH "FILES"
-.NF
+.nf
 .I /etc/tuned/*
 .I /usr/lib/tuned/*
 
@@ -129,7 +128,7 @@ It additionally enables more aggresive writeback of dirty pages.
 .BR tuned\-profiles\-cpu\-partitioning (7)
 .BR tuned\-profiles\-compat (7)
 .SH AUTHOR
-.NF
+.nf
 Jaroslav Škarvada <jskarvad@redhat.com>
 Jan Kaluža <jkaluza@redhat.com>
 Jan Včelák <jvcelak@redhat.com>

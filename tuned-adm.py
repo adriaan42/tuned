@@ -55,9 +55,9 @@ if __name__ == "__main__":
 	parser_off = subparsers.add_parser("off", help="switch off all tunings")
 	parser_off.set_defaults(action="off")
 
-	parser_profile = subparsers.add_parser("profile", help="switch to a given profile")
+	parser_profile = subparsers.add_parser("profile", help="switch to a given profile, or list available profiles if no profile is given")
 	parser_profile.set_defaults(action="profile")
-	parser_profile.add_argument("profiles", metavar="profile", type=str, nargs="+", help="profile name")
+	parser_profile.add_argument("profiles", metavar="profile", type=str, nargs="*", help="profile name")
 
 	parser_profile_info = subparsers.add_parser("profile_info", help="show information/description of given profile or current profile if no profile is specified")
 	parser_profile_info.set_defaults(action="profile_info")
@@ -70,6 +70,12 @@ if __name__ == "__main__":
 	parser_verify = subparsers.add_parser("verify", help="verify profile")
 	parser_verify.set_defaults(action="verify_profile")
 	parser_verify.add_argument("--ignore-missing", "-i", action="store_true", help="do not treat missing/non-supported tunings as errors")
+
+	parser_auto_profile = subparsers.add_parser("auto_profile", help="enable automatic profile selection mode, switch to the recommended profile")
+	parser_auto_profile.set_defaults(action="auto_profile")
+
+	parser_profile_mode = subparsers.add_parser("profile_mode", help="show current profile selection mode")
+	parser_profile_mode.set_defaults(action="profile_mode")
 
 	args = parser.parse_args(sys.argv[1:])
 

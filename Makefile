@@ -4,7 +4,7 @@ BUILD = release
 # which config to use in mock-build target
 MOCK_CONFIG = rhel-7-x86_64
 # scratch-build for triggering Jenkins
-SCRATCH_BUILD_TARGET = rhel-7.2-candidate
+SCRATCH_BUILD_TARGET = rhel-7.5-candidate
 VERSION = $(shell awk '/^Version:/ {print $$2}' tuned.spec)
 GIT_DATE = $(shell date +'%Y%m%d')
 ifeq ($(BUILD), release)
@@ -20,10 +20,10 @@ else
 	RPM_VERSION = $(NAME)-$(VERSION)-1$(GIT_PSUFFIX)
 endif
 UNITDIR_FALLBACK = /usr/lib/systemd/system
-UNITDIR_DETECT = $(shell rpm --eval '%{_unitdir}' 2>/dev/null || echo $(UNITDIR_FALLBACK))
+UNITDIR_DETECT = $(shell pkg-config systemd --variable systemdsystemunitdir || rpm --eval '%{_unitdir}' 2>/dev/null || echo $(UNITDIR_FALLBACK))
 UNITDIR = $(UNITDIR_DETECT:%{_unitdir}=$(UNITDIR_FALLBACK))
 TMPFILESDIR_FALLBACK = /usr/lib/tmpfiles.d
-TMPFILESDIR_DETECT = $(shell rpm --eval '%{_tmpfilesdir}' 2>/dev/null || echo $(TMPFILESDIR_FALLBACK))
+TMPFILESDIR_DETECT = $(shell pkg-config systemd --variable tmpfilesdir || rpm --eval '%{_tmpfilesdir}' 2>/dev/null || echo $(TMPFILESDIR_FALLBACK))
 TMPFILESDIR = $(TMPFILESDIR_DETECT:%{_tmpfilesdir}=$(TMPFILESDIR_FALLBACK))
 VERSIONED_NAME = $(NAME)-$(VERSION)$(GIT_PSUFFIX)
 
@@ -31,6 +31,7 @@ DATADIR = /usr/share
 DOCDIR = $(DATADIR)/doc/$(NAME)
 PYTHON_SITELIB = $(shell python -c 'from distutils.sysconfig import get_python_lib; print get_python_lib();' || echo /usr/lib/python2.7/site-packages)
 TUNED_PROFILESDIR = /usr/lib/tuned
+TUNED_RECOMMEND_DIR = $(TUNED_PROFILESDIR)/recommend.d
 BASH_COMPLETIONS = $(DATADIR)/bash-completion/completions
 
 release-dir:
@@ -48,18 +49,18 @@ release-cp: release-dir
 		$(VERSIONED_NAME)
 
 archive: clean release-cp
-	tar cjf $(VERSIONED_NAME).tar.bz2 $(VERSIONED_NAME)
+	tar czf $(VERSIONED_NAME).tar.gz $(VERSIONED_NAME)
 
 rpm-build-dir:
 	mkdir rpm-build-dir
 
 srpm: archive rpm-build-dir
 	rpmbuild --define "_sourcedir `pwd`/rpm-build-dir" --define "_srcrpmdir `pwd`/rpm-build-dir" \
-		--define "_specdir `pwd`/rpm-build-dir" --nodeps $(RPM_ARGS) -ts $(VERSIONED_NAME).tar.bz2
+		--define "_specdir `pwd`/rpm-build-dir" --nodeps $(RPM_ARGS) -ts $(VERSIONED_NAME).tar.gz
 
 rpm: archive rpm-build-dir
 	rpmbuild --define "_sourcedir `pwd`/rpm-build-dir" --define "_srcrpmdir `pwd`/rpm-build-dir" \
-		--define "_specdir `pwd`/rpm-build-dir" --nodeps $(RPM_ARGS) -tb $(VERSIONED_NAME).tar.bz2
+		--define "_specdir `pwd`/rpm-build-dir" --nodeps $(RPM_ARGS) -tb $(VERSIONED_NAME).tar.gz
 
 clean-mock-result-dir:
 	rm -f mock-result-dir/*
@@ -88,7 +89,7 @@ createrepo: mock-devel-build
 
 # scratch build to triggering Jenkins
 scratch-build: mock-devel-build
-	brew build --scratch --nowait rhel-7.2-candidate `ls mock-result-dir/*$(GIT_DATE)git*.*.src.rpm | head -n 1`
+	brew build --scratch --nowait $(SCRATCH_BUILD_TARGET) `ls mock-result-dir/*$(GIT_DATE)git*.*.src.rpm | head -n 1`
 
 nightly: tidy-mock-result-dir createrepo scratch-build
 	rsync -ave ssh --delete --progress mock-result-dir/ jskarvad@fedorapeople.org:/home/fedora/jskarvad/public_html/tuned/devel/repo/
@@ -100,6 +101,7 @@ install-dirs:
 	mkdir -p $(DESTDIR)/var/log/tuned
 	mkdir -p $(DESTDIR)/run/tuned
 	mkdir -p $(DESTDIR)$(DOCDIR)
+	mkdir -p $(DESTDIR)$(TUNED_RECOMMEND_DIR)
 
 install: install-dirs
 	# library
@@ -113,7 +115,7 @@ install: install-dirs
 		install -Dpm 0755 $(file) $(DESTDIR)/usr/sbin/$(notdir $(file));)
 
 	# glade
-	install -Dpm 0755 tuned-gui.glade $(DESTDIR)$(DATADIR)/tuned/ui/tuned-gui.glade
+	install -Dpm 0644 tuned-gui.glade $(DESTDIR)$(DATADIR)/tuned/ui/tuned-gui.glade
 
 	# tools
 	install -Dpm 0755 experiments/powertop2tuned.py $(DESTDIR)/usr/bin/powertop2tuned
@@ -122,6 +124,7 @@ install: install-dirs
 	install -Dpm 0644 tuned-main.conf $(DESTDIR)/etc/tuned/tuned-main.conf
 	# None profile in the moment, autodetection will be used
 	echo -n > $(DESTDIR)/etc/tuned/active_profile
+	echo -n > $(DESTDIR)/etc/tuned/profile_mode
 	install -Dpm 0644 bootcmdline $(DESTDIR)/etc/tuned/bootcmdline
 	install -Dpm 0644 modules.conf $(DESTDIR)/etc/modprobe.d/tuned.conf
 
@@ -135,7 +138,9 @@ install: install-dirs
 		$(DESTDIR)/etc/tuned/realtime-virtual-host-variables.conf
 	mv $(DESTDIR)$(TUNED_PROFILESDIR)/cpu-partitioning/cpu-partitioning-variables.conf \
 		$(DESTDIR)/etc/tuned/cpu-partitioning-variables.conf
-	install -pm 0644 recommend.conf $(DESTDIR)$(TUNED_PROFILESDIR)/recommend.conf
+	mv $(DESTDIR)$(TUNED_PROFILESDIR)/sap-hana-vmware/sap-hana-vmware-variables.conf \
+		$(DESTDIR)/etc/tuned/sap-hana-vmware-variables.conf
+	install -pm 0644 recommend.conf $(DESTDIR)$(TUNED_RECOMMEND_DIR)/50-tuned.conf
 
 	# bash completion
 	install -Dpm 0644 tuned-adm.bash $(DESTDIR)$(BASH_COMPLETIONS)/tuned-adm

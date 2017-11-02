@@ -1,11 +1,10 @@
 [Desktop Entry]
-Encoding=UTF-8
 Name=tuned-gui
-GenericName=tuned-gui
+GenericName=tuned
 Comment=GTK GUI that can control Tuned daemon and provides simple profile editor
-Exec=tuned-gui
+Exec=/usr/sbin/tuned-gui
 Icon=tuned
 Terminal=false
 Type=Application
-Categories=System;
+Categories=Settings;HardwareSettings;
 Version=1.0

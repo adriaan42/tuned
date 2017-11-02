@@ -21,18 +21,19 @@ class Application(object):
 		storage_provider = storage.PickleProvider()
 		storage_factory = storage.Factory(storage_provider)
 
+		self.config = GlobalConfig() if config is None else config
+		if self.config.get_bool(consts.CFG_DYNAMIC_TUNING):
+			log.info("dynamic tuning is enabled (can be overridden in plugins)")
+		else:
+			log.info("dynamic tuning is globally disabled")
+
 		monitors_repository = monitors.Repository()
-		hardware_inventory = hardware.Inventory()
+		udev_buffer_size = self.config.get_size("udev_buffer_size", consts.CFG_DEF_UDEV_BUFFER_SIZE)
+		hardware_inventory = hardware.Inventory(buffer_size=udev_buffer_size)
 		device_matcher = hardware.DeviceMatcher()
 		device_matcher_udev = hardware.DeviceMatcherUdev()
 		plugin_instance_factory = plugins.instance.Factory()
 		self.variables = profiles.variables.Variables()
-
-		self.config = GlobalConfig() if config is None else config
-		if self.config.get_bool(consts.CFG_DYNAMIC_TUNING):
-			log.info("dynamic tuning is enabled (can be overriden in plugins)")
-		else:
-			log.info("dynamic tuning is globally disabled")
 
 		plugins_repository = plugins.Repository(monitors_repository, storage_factory, hardware_inventory,\
 			device_matcher, device_matcher_udev, plugin_instance_factory, self.config, self.variables)
@@ -185,9 +186,7 @@ class Application(object):
 		# override global config if ran from command line with daemon option (-d)
 		if daemon:
 			self.config.set(consts.CFG_DAEMON, True)
-		if self.config.get_bool(consts.CFG_DAEMON, consts.CFG_DEF_DAEMON):
-			exports.start()
-		else:
+		if not self.config.get_bool(consts.CFG_DAEMON, consts.CFG_DEF_DAEMON):
 			log.warn("Using one shot no deamon mode, most of the functionality will be not available, it can be changed in global config")
 		result = self._controller.run()
 		if self.config.get_bool(consts.CFG_DAEMON, consts.CFG_DEF_DAEMON):

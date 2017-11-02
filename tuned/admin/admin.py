@@ -3,6 +3,7 @@ import tuned.admin
 from tuned.utils.commands import commands
 from tuned.profiles import Locator as profiles_locator
 from exceptions import TunedAdminDBusException
+from tuned.exceptions import TunedException
 import tuned.consts as consts
 import os
 import sys
@@ -111,11 +112,14 @@ class Admin(object):
 		return profile_name
 
 	def _get_active_profile(self):
-		profile_name = None
-		profile_name = str.strip(self._cmd.read_file(consts.ACTIVE_PROFILE_FILE, None))
-		if profile_name == "":
-			profile_name = None
+		profile_name, manual = self._cmd.get_active_profile()
 		return profile_name
+
+	def _get_profile_mode(self):
+		(profile, manual) = self._cmd.get_active_profile()
+		if manual is None:
+			manual = profile is not None
+		return consts.ACTIVE_PROFILE_MANUAL if manual else consts.ACTIVE_PROFILE_AUTO
 
 	def _print_profile_info(self, profile, profile_info):
 		if profile_info[0] == True:
@@ -139,7 +143,14 @@ class Admin(object):
 
 	def _action_profile_info(self, profile = ""):
 		if profile == "":
-			profile = self._get_active_profile()
+			try:
+				profile = self._get_active_profile()
+				if profile is None:
+					print("No current active profile.")
+					return False
+			except TunedException as e:
+				self._error(str(e))
+				return False
 		return self._print_profile_info(profile, self._profiles_locator.get_profile_attrs(profile, [consts.PROFILE_ATTR_SUMMARY, consts.PROFILE_ATTR_DESCRIPTION], ["", ""]))
 
 	def _print_profile_name(self, profile_name):
@@ -154,12 +165,36 @@ class Admin(object):
 		return self._controller.exit(self._print_profile_name(self._dbus_get_active_profile()))
 
 	def _action_active(self):
-		profile_name = self._get_active_profile()
+		try:
+			profile_name = self._get_active_profile()
+		except TunedException as e:
+			self._error(str(e))
+			return False
 		if profile_name is not None and not self._tuned_is_running():
 			print("It seems that tuned daemon is not running, preset profile is not activated.")
 			print("Preset profile: %s" % profile_name)
 			return True
 		return self._print_profile_name(profile_name)
+
+	def _print_profile_mode(self, mode):
+		print("Profile selection mode: " + mode)
+
+	def _action_dbus_profile_mode(self):
+		mode, error = self._controller.profile_mode()
+		self._print_profile_mode(mode)
+		if error != "":
+			self._error(error)
+			return self._controller.exit(False)
+		return self._controller.exit(True)
+
+	def _action_profile_mode(self):
+		try:
+			mode = self._get_profile_mode()
+			self._print_profile_mode(mode)
+			return True
+		except TunedException as e:
+			self._error(str(e))
+			return False
 
 	def _profile_print_status(self, ret, msg):
 		if ret:
@@ -183,9 +218,11 @@ class Admin(object):
 		return False
 
 	def _action_dbus_profile(self, profiles):
+		if len(profiles) == 0:
+			return self._action_dbus_list()
 		profile_name = " ".join(profiles)
 		if profile_name == "":
-			return False
+			return self._controller.exit(False)
 		self._daemon_action_finished.clear()
 		(ret, msg) = self._controller.switch_profile(profile_name)
 		if self._async or not ret:
@@ -195,25 +232,50 @@ class Admin(object):
 			self._controller.set_action(self._action_dbus_wait_profile, profile_name)
 		return self._profile_print_status(ret, msg)
 
-	def _action_profile(self, profiles):
-		profile_name = " ".join(profiles)
-		if profile_name == "":
-			return False
+	def _restart_tuned(self):
+		print("Trying to (re)start tuned...")
+		(ret, msg) = self._cmd.execute(["service", "tuned", "restart"])
+		if ret == 0:
+			print("Tuned (re)started, changes applied.")
+		else:
+			print("Tuned (re)start failed, you need to (re)start tuned by hand for changes to apply.")
+
+	def _set_profile(self, profile_name, manual):
 		if profile_name in self._profiles_locator.get_known_names():
-			if self._cmd.write_to_file(consts.ACTIVE_PROFILE_FILE, profile_name):
-				print("Trying to (re)start tuned...")
-				(ret, msg) = self._cmd.execute(["service", "tuned", "restart"])
-				if ret == 0:
-					print("Tuned (re)started, changes applied.")
-				else:
-					print("Tuned (re)start failed, you need to (re)start tuned by hand for changes to apply.")
+			try:
+				self._cmd.save_active_profile(profile_name, manual)
+				self._restart_tuned()
 				return True
-			else:
-				self._error("Unable to switch profile, do you have enough permissions?")
+			except TunedException as e:
+				self._error(str(e))
+				self._error("Unable to switch profile.")
 				return False
 		else:
 			self._error("Requested profile '%s' doesn't exist." % profile_name)
 			return False
+
+	def _action_profile(self, profiles):
+		if len(profiles) == 0:
+			return self._action_list()
+		profile_name = " ".join(profiles)
+		if profile_name == "":
+			return False
+		return self._set_profile(profile_name, True)
+
+	def _action_dbus_auto_profile(self):
+		profile_name = self._controller.recommend_profile()
+		self._daemon_action_finished.clear()
+		(ret, msg) = self._controller.auto_profile()
+		if self._async or not ret:
+			return self._controller.exit(self._profile_print_status(ret, msg))
+		else:
+			self._timestamp = time.time()
+			self._controller.set_action(self._action_dbus_wait_profile, profile_name)
+		return self._profile_print_status(ret, msg)
+
+	def _action_auto_profile(self):
+		profile_name = self._cmd.recommend_profile()
+		return self._set_profile(profile_name, False)
 
 	def _action_dbus_recommend_profile(self):
 		print(self._controller.recommend_profile())
@@ -232,9 +294,11 @@ class Admin(object):
 			print("Verfication succeeded, current system settings match the preset profile.")
 		else:
 			print("Verification failed, current system settings differ from the preset profile.")
-			print("You can mostly fix this by Tuned restart, e.g.:")
+			print("You can mostly fix this by restarting the Tuned daemon, e.g.:")
+			print("  systemctl restart tuned")
+			print("or")
 			print("  service tuned restart")
-			print("Sometimes (if some plugins like bootloader are used) also reboot is required.")
+			print("Sometimes (if some plugins like bootloader are used) a reboot may be required.")
 		print("See tuned log file ('%s') for details." % consts.LOG_FILE)
 		return self._controller.exit(ret)
 

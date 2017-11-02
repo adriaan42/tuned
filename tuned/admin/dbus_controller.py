@@ -67,7 +67,7 @@ class DBusController(object):
 
 		try:
 			method = self._interface.get_dbus_method(method_name)
-			return method(*args, **kwargs)
+			return method(*args, timeout=40)
 		except dbus.exceptions.DBusException as dbus_exception:
 			err_str = "DBus call to Tuned daemon failed"
 			if self._debug:
@@ -99,10 +99,16 @@ class DBusController(object):
 	def active_profile(self):
 		return self._call("active_profile")
 
+	def profile_mode(self):
+		return self._call("profile_mode")
+
 	def switch_profile(self, new_profile):
 		if new_profile == "":
 			return (False, "No profile specified")
 		return self._call("switch_profile", new_profile)
+
+	def auto_profile(self):
+		return self._call("auto_profile")
 
 	def recommend_profile(self):
 		return self._call("recommend_profile")
