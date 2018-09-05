@@ -1,6 +1,6 @@
 import errno
-import hotplug
-from decorators import *
+from . import hotplug
+from .decorators import *
 import tuned.logs
 import tuned.consts as consts
 from tuned.utils.commands import commands
@@ -15,7 +15,7 @@ class DiskPlugin(hotplug.Plugin):
 	"""
 
 	def __init__(self, *args, **kwargs):
-		super(self.__class__, self).__init__(*args, **kwargs)
+		super(DiskPlugin, self).__init__(*args, **kwargs)
 
 		self._power_levels = [254, 225, 195, 165, 145, 125, 105, 85, 70, 55, 30, 20]
 		self._spindown_levels = [0, 250, 230, 210, 190, 170, 150, 130, 110, 90, 70, 60]
@@ -34,7 +34,7 @@ class DiskPlugin(hotplug.Plugin):
 		self._assigned_devices = set()
 
 	def _get_device_objects(self, devices):
-		return map(lambda x: self._hardware_inventory.get_device("block", x), devices)
+		return [self._hardware_inventory.get_device("block", x) for x in devices]
 
 	@classmethod
 	def _device_is_supported(cls, device):
@@ -51,17 +51,17 @@ class DiskPlugin(hotplug.Plugin):
 
 	def _hardware_events_callback(self, event, device):
 		if self._device_is_supported(device):
-			super(self.__class__, self)._hardware_events_callback(event, device)
+			super(DiskPlugin, self)._hardware_events_callback(event, device)
 
 	def _added_device_apply_tuning(self, instance, device_name):
 		if instance._load_monitor is not None:
 			instance._load_monitor.add_device(device_name)
-		super(self.__class__, self)._added_device_apply_tuning(instance, device_name)
+		super(DiskPlugin, self)._added_device_apply_tuning(instance, device_name)
 
 	def _removed_device_unapply_tuning(self, instance, device_name):
 		if instance._load_monitor is not None:
 			instance._load_monitor.remove_device(device_name)
-		super(self.__class__, self)._removed_device_unapply_tuning(instance, device_name)
+		super(DiskPlugin, self)._removed_device_unapply_tuning(instance, device_name)
 
 	@classmethod
 	def _get_config_options(cls):
@@ -196,12 +196,12 @@ class DiskPlugin(hotplug.Plugin):
 		instance._stats[device]["new"] = new_load
 
 		# load difference
-		diff = map(lambda (new, old): new - old, zip(new_load, old_load))
+		diff = [new_old[0] - new_old[1] for new_old in zip(new_load, old_load)]
 		instance._stats[device]["diff"] = diff
 
 		# adapt maximum expected load if the difference is higer
 		old_max_load = instance._stats[device]["max"]
-		max_load = map(lambda pair: max(pair), zip(old_max_load, diff))
+		max_load = [max(pair) for pair in zip(old_max_load, diff)]
 		instance._stats[device]["max"] = max_load
 
 		# read/write ratio
@@ -319,7 +319,9 @@ class DiskPlugin(hotplug.Plugin):
 	def _multiply_readahead(self, enabling, multiplier, device, verify, ignore_missing):
 		if verify:
 			return None
-		storage_key = self._storage_key("readahead_multiply", device)
+		storage_key = self._storage_key(
+				command_name = "readahead_multiply",
+				device_name = device)
 		if enabling:
 			old_readahead = self._get_readahead(device)
 			if old_readahead is None:

@@ -1,6 +1,6 @@
 import re
-import base
-from decorators import *
+from . import base
+from .decorators import *
 import tuned.logs
 from subprocess import *
 from tuned.utils.commands import commands
@@ -14,12 +14,9 @@ class SysctlPlugin(base.Plugin):
 	"""
 
 	def __init__(self, *args, **kwargs):
-		super(self.__class__, self).__init__(*args, **kwargs)
+		super(SysctlPlugin, self).__init__(*args, **kwargs)
 		self._has_dynamic_options = True
 		self._cmd = commands()
-
-	def _sysctl_storage_key(self, instance):
-		return "%s/options" % instance.name
 
 	def _instance_init(self, instance):
 		instance._has_dynamic_tuning = False
@@ -27,26 +24,29 @@ class SysctlPlugin(base.Plugin):
 
 		# FIXME: do we want to do this here?
 		# recover original values in case of crash
-		instance._sysctl_original = self._storage.get(self._sysctl_storage_key(instance), {})
+		storage_key = self._storage_key(instance.name)
+		instance._sysctl_original = self._storage.get(storage_key, {})
 		if len(instance._sysctl_original) > 0:
 			log.info("recovering old sysctl settings from previous run")
 			self._instance_unapply_static(instance)
 			instance._sysctl_original = {}
-			self._storage.unset(self._sysctl_storage_key(instance))
+			self._storage.unset(storage_key)
 
 		instance._sysctl = instance.options
 
 	def _instance_cleanup(self, instance):
-		self._storage.unset(self._sysctl_storage_key(instance))
+		storage_key = self._storage_key(instance.name)
+		self._storage.unset(storage_key)
 
 	def _instance_apply_static(self, instance):
-		for option, value in instance._sysctl.items():
+		for option, value in list(instance._sysctl.items()):
 			original_value = self._read_sysctl(option)
 			if original_value != None:
 				instance._sysctl_original[option] = original_value
-			self._write_sysctl(option, self._variables.expand(self._cmd.unquote(value)))
+			self._write_sysctl(option, self._process_assignment_modifiers(self._variables.expand(self._cmd.unquote(value)), original_value))
 
-		self._storage.set("options", instance._sysctl_original)
+		storage_key = self._storage_key(instance.name)
+		self._storage.set(storage_key, instance._sysctl_original)
 
 		if self._global_cfg.get_bool(consts.CFG_REAPPLY_SYSCTL, consts.CFG_DEF_REAPPLY_SYSCTL):
 			log.info("reapplying system sysctl")
@@ -56,14 +56,16 @@ class SysctlPlugin(base.Plugin):
 		ret = True
 		# override, so always skip missing
 		ignore_missing = True
-		for option, value in instance._sysctl.items():
+		for option, value in list(instance._sysctl.items()):
 			curr_val = self._read_sysctl(option)
-			if self._verify_value(option, self._cmd.remove_ws(self._variables.expand(value)), curr_val, ignore_missing) == False:
-				ret = False
+			value = self._process_assignment_modifiers(self._variables.expand(value), curr_val)
+			if value is not None:
+				if self._verify_value(option, self._cmd.remove_ws(value), curr_val, ignore_missing) == False:
+					ret = False
 		return ret
 
 	def _instance_unapply_static(self, instance, full_rollback = False):
-		for option, value in instance._sysctl_original.items():
+		for option, value in list(instance._sysctl_original.items()):
 			self._write_sysctl(option, value)
 
 	def _execute_sysctl(self, arguments):
@@ -74,7 +76,7 @@ class SysctlPlugin(base.Plugin):
 	def _read_sysctl(self, option):
 		retcode, stdout = self._execute_sysctl(["-e", option])
 		if retcode == 0:
-			parts = map(lambda value: self._cmd.remove_ws(value), stdout.split("=", 1))
+			parts = [self._cmd.remove_ws(value) for value in stdout.split("=", 1)]
 			if len(parts) == 2:
 				option, value = parts
 				return value

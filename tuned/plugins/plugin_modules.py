@@ -1,7 +1,7 @@
 import re
 import os.path
-import base
-from decorators import *
+from . import base
+from .decorators import *
 import tuned.logs
 from subprocess import *
 from tuned.utils.commands import commands
@@ -15,7 +15,7 @@ class ModulesPlugin(base.Plugin):
 	"""
 
 	def __init__(self, *args, **kwargs):
-		super(self.__class__, self).__init__(*args, **kwargs)
+		super(ModulesPlugin, self).__init__(*args, **kwargs)
 		self._has_dynamic_options = True
 		self._cmd = commands()
 
@@ -45,7 +45,7 @@ class ModulesPlugin(base.Plugin):
 		retcode = 0
 		skip_check = False
 		reload_list = []
-		for option, value in instance._modules.items():
+		for option, value in list(instance._modules.items()):
 			module = self._variables.expand(option)
 			v = self._variables.expand(value)
 			if not skip_check:
@@ -78,7 +78,7 @@ class ModulesPlugin(base.Plugin):
 		# not all modules exports all their parameteters through sysfs, so hardcode check with ignore_missing
 		ignore_missing = True
 		r = re.compile(r"\s+")
-		for option, value in instance._modules.items():
+		for option, value in list(instance._modules.items()):
 			module = self._variables.expand(option)
 			v = self._variables.expand(value)
 			v = re.sub(r"^\s*\+r\s*,?\s*", "", v)

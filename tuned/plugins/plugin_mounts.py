@@ -1,6 +1,6 @@
 import tuned.consts as consts
-import base
-from decorators import *
+from . import base
+from .decorators import *
 from subprocess import Popen,PIPE
 import tuned.logs
 from tuned.utils.commands import commands
@@ -23,8 +23,11 @@ class MountsPlugin(base.Plugin):
 		mountpoint_topology = {}
 		current_disk = None
 
-		stdout, stderr = Popen(["lsblk", "-rno", "TYPE,RM,KNAME,FSTYPE,MOUNTPOINT"], stdout=PIPE, stderr=PIPE, close_fds=True).communicate()
-		for columns in map(lambda line: line.split(), stdout.splitlines()):
+		stdout, stderr = Popen(["lsblk", "-rno", \
+				"TYPE,RM,KNAME,FSTYPE,MOUNTPOINT"], \
+				stdout=PIPE, stderr=PIPE, close_fds=True, \
+				universal_newlines = True).communicate()
+		for columns in [line.split() for line in stdout.splitlines()]:
 			if len(columns) < 3:
 				continue
 			device_type, device_removable, device_name = columns[:3]
@@ -122,7 +125,9 @@ class MountsPlugin(base.Plugin):
 
 	@command_custom("disable_barriers", per_device=True)
 	def _disable_barriers(self, start, value, mountpoint, verify, ignore_missing):
-		storage_key = self._storage_key("disable_barriers", mountpoint)
+		storage_key = self._storage_key(
+				command_name = "disable_barriers",
+				device_name = mountpoint)
 		force = str(value).lower() == "force"
 		value = force or self._option_bool(value)
 

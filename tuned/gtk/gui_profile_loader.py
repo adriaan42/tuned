@@ -65,7 +65,8 @@ class GuiProfileLoader(object):
 
     def load_profile_config(self, profile_name, path):
         conf_path = path + '/' + profile_name + '/' + tuned.consts.PROFILE_FILE
-        profile_config = configobj.ConfigObj(conf_path)
+        profile_config = configobj.ConfigObj(conf_path, list_values = False,
+			interpolation = False)
         return profile_config
 
     def _locate_profile_path(self, profile_name):
@@ -97,7 +98,7 @@ class GuiProfileLoader(object):
 
     def save_profile(self, profile):
         path = tuned.consts.LOAD_DIRECTORIES[1] + '/' + profile.name
-        config = configobj.ConfigObj()
+        config = configobj.ConfigObj(list_values = False, interpolation = False)
         config.filename = path + '/' + tuned.consts.PROFILE_FILE
         config.initial_comment = ('#', 'tuned configuration', '#')
 
@@ -109,7 +110,7 @@ class GuiProfileLoader(object):
             # profile dont have main section
 
             pass
-        for (name, unit) in profile.units.items():
+        for (name, unit) in list(profile.units.items()):
             config[name] = unit.options
         if not os.path.exists(path):
             os.makedirs(path)
@@ -140,7 +141,7 @@ class GuiProfileLoader(object):
         if old_profile_name != profile.name:
             self.remove_profile(old_profile_name, is_admin=is_admin)
 
-        config = configobj.ConfigObj()
+        config = configobj.ConfigObj(list_values = False, interpolation = False)
         config.filename = path + '/' + tuned.consts.PROFILE_FILE
         config.initial_comment = ('#', 'tuned configuration', '#')
         try:
@@ -150,7 +151,7 @@ class GuiProfileLoader(object):
             # profile dont have main section
 
             pass
-        for (name, unit) in profile.units.items():
+        for (name, unit) in list(profile.units.items()):
             config[name] = unit.options
 
         if not os.path.exists(path):
@@ -159,7 +160,7 @@ class GuiProfileLoader(object):
         self._refresh_profiles()
 
     def get_names(self):
-        return self.profiles.keys()
+        return list(self.profiles.keys())
 
     def get_profile(self, profile):
         return self.profiles[profile]

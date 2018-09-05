@@ -1,6 +1,6 @@
 import os
 import tuned.logs
-import base
+from . import base
 from tuned.utils.commands import commands
 from tuned.profiles.exceptions import InvalidProfileException
 
@@ -14,10 +14,10 @@ class assertion(base.Function):
 	"""
 	def __init__(self):
 		# 2 arguments
-		super(self.__class__, self).__init__("assertion", 3)
+		super(assertion, self).__init__("assertion", 3)
 
 	def execute(self, args):
-		if not super(self.__class__, self).execute(args):
+		if not super(assertion, self).execute(args):
 			return None
 		if args[1] != args[2]:
 			log.error("assertion '%s' failed: '%s' != '%s'" % (args[0], args[1], args[2]))

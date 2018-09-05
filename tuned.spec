@@ -1,5 +1,30 @@
 %bcond_with snapshot
 
+%if 0%{?fedora}
+%if 0%{?fedora} > 27
+%bcond_without python3
+%else
+%bcond_with python3
+%endif
+%else
+%if 0%{?rhel} && 0%{?rhel} < 8
+%bcond_with python3
+%else
+%bcond_without python3
+%endif
+%endif
+
+%if %{with python3}
+%global _py python3
+%else
+%{!?python2_sitelib:%global python2_sitelib %{python_sitelib}}
+%if 0%{?rhel} && 0%{?rhel} < 8
+%global _py python
+%else
+%global _py python2
+%endif
+%endif
+
 %if %{with snapshot}
 %if 0%{!?git_short_commit:1}
 %global git_short_commit %(git rev-parse --short=8 --verify HEAD)
@@ -9,27 +34,34 @@
 %endif
 
 #%%global prerelease rc
-#%%global prereleasenum 2
+#%%global prereleasenum 1
 
 %global prerel1 %{?prerelease:.%{prerelease}%{prereleasenum}}
 %global prerel2 %{?prerelease:-%{prerelease}.%{prereleasenum}}
 
 Summary: A dynamic adaptive system tuning daemon
 Name: tuned
-Version: 2.9.0
+Version: 2.10.0
 Release: 1%{?prerel1}%{?with_snapshot:.%{git_suffix}}%{?dist}
 License: GPLv2+
-Source: https://github.com/redhat-performance/%{name}/archive/v%{version}%{?prerel2}.tar.gz#/%{name}-%{version}%{?prerel1}.tar.gz
+Source0: https://github.com/redhat-performance/%{name}/archive/v%{version}%{?prerel2}.tar.gz#/%{name}-%{version}%{?prerel1}.tar.gz
 URL: http://www.tuned-project.org/
 BuildArch: noarch
-BuildRequires: python, systemd, desktop-file-utils
+BuildRequires: systemd, desktop-file-utils
 Requires(post): systemd, virt-what
 Requires(preun): systemd
 Requires(postun): systemd
-Requires: python-decorator, dbus-python, pygobject3-base, python-pyudev
-Requires: virt-what, python-configobj, ethtool, gawk, hdparm
-Requires: util-linux, python-perf, dbus, polkit, python-linux-procfs
-Requires: python-schedutils
+BuildRequires: %{_py}, %{_py}-devel
+Requires: %{_py}-decorator, %{_py}-pyudev, %{_py}-configobj
+Requires: %{_py}-schedutils, %{_py}-linux-procfs, %{_py}-perf
+# requires for packages with inconsistent python2/3 names
+%if %{with python3}
+Requires: python3-dbus, python3-gobject-base
+%else
+Requires: dbus-python, pygobject3-base
+%endif
+Requires: virt-what, ethtool, gawk, hdparm
+Requires: util-linux, dbus, polkit
 %if 0%{?fedora} > 22 || 0%{?rhel} > 7
 Recommends: kernel-tools
 %endif
@@ -52,7 +84,13 @@ network and ATA harddisk devices are implemented.
 %package gtk
 Summary: GTK GUI for tuned
 Requires: %{name} = %{version}-%{release}
-Requires: powertop, pygobject3-base, polkit
+Requires: powertop, polkit
+# requires for packages with inconsistent python2/3 names
+%if %{with python3}
+Requires: python3-gobject-base
+%else
+Requires: pygobject3-base
+%endif
 
 %description gtk
 GTK GUI that can control tuned and provides simple profile editor.
@@ -84,6 +122,13 @@ Requires: %{name} = %{version}
 
 %description profiles-sap
 Additional tuned profile(s) targeted to SAP NetWeaver loads.
+
+%package profiles-mssql
+Summary: Additional tuned profile(s) for MS SQL Server
+Requires: %{name} = %{version}
+
+%description profiles-mssql
+Additional tuned profile(s) for MS SQL Server.
 
 %package profiles-oracle
 Summary: Additional tuned profile(s) targeted to Oracle loads
@@ -128,11 +173,10 @@ Summary: Additional tuned profile(s) targeted to Network Function Virtualization
 Requires: %{name} = %{version}
 Requires: %{name}-profiles-realtime = %{version}
 Requires: tuna
-%if 0%{?fedora} > 22
-Recommends: qemu-kvm-tools-rhev
-%endif
 %if 0%{?rhel} == 7
 Requires: qemu-kvm-tools-rhev
+%else
+Recommends: tuned-profiles-nfv-host-bin
 %endif
 
 %description profiles-nfv-host
@@ -166,12 +210,15 @@ It can be also used to fine tune your system for specific scenarios.
 %prep
 %setup -q -n %{name}-%{version}%{?prerel2}
 
-
 %build
 
-
 %install
-make install DESTDIR=%{buildroot} DOCDIR=%{docdir}
+make install DESTDIR=%{buildroot} DOCDIR=%{docdir} \
+%if %{with python3}
+	PYTHON=python3
+%else
+	PYTHON=python2
+%endif
 %if 0%{?rhel}
 sed -i 's/\(dynamic_tuning[ \t]*=[ \t]*\).*/\10/' %{buildroot}%{_sysconfdir}/tuned/tuned-main.conf
 %endif
@@ -267,8 +314,13 @@ fi
 %exclude %{docdir}/README.NFV
 %doc %{docdir}
 %{_datadir}/bash-completion/completions/tuned-adm
-%exclude %{python_sitelib}/tuned/gtk
-%{python_sitelib}/tuned
+%if %{with python3}
+%exclude %{python3_sitelib}/tuned/gtk
+%{python3_sitelib}/tuned
+%else
+%exclude %{python2_sitelib}/tuned/gtk
+%{python2_sitelib}/tuned
+%endif
 %{_sbindir}/tuned
 %{_sbindir}/tuned-adm
 %exclude %{_sysconfdir}/tuned/realtime-variables.conf
@@ -286,6 +338,7 @@ fi
 %exclude %{_prefix}/lib/tuned/sap-netweaver
 %exclude %{_prefix}/lib/tuned/sap-hana
 %exclude %{_prefix}/lib/tuned/sap-hana-vmware
+%exclude %{_prefix}/lib/tuned/mssql
 %exclude %{_prefix}/lib/tuned/oracle
 %exclude %{_prefix}/lib/tuned/atomic-host
 %exclude %{_prefix}/lib/tuned/atomic-guest
@@ -320,7 +373,11 @@ fi
 %files gtk
 %defattr(-,root,root,-)
 %{_sbindir}/tuned-gui
-%{python_sitelib}/tuned/gtk
+%if %{with python3}
+%{python3_sitelib}/tuned/gtk
+%else
+%{python2_sitelib}/tuned/gtk
+%endif
 %{_datadir}/tuned/ui
 %{_datadir}/polkit-1/actions/com.redhat.tuned.gui.policy
 %{_datadir}/icons/hicolor/scalable/apps/tuned.svg
@@ -356,6 +413,11 @@ fi
 %{_prefix}/lib/tuned/sap-hana
 %{_prefix}/lib/tuned/sap-hana-vmware
 %{_mandir}/man7/tuned-profiles-sap-hana.7*
+
+%files profiles-mssql
+%defattr(-,root,root,-)
+%{_prefix}/lib/tuned/mssql
+%{_mandir}/man7/tuned-profiles-mssql.7*
 
 %files profiles-oracle
 %defattr(-,root,root,-)
@@ -408,6 +470,44 @@ fi
 %{_mandir}/man7/tuned-profiles-compat.7*
 
 %changelog
+* Wed Jul  4 2018 Jaroslav Škarvada <jskarvad@redhat.com> - 2.10.0-1
+- new release
+  - rebased tuned to latest upstream
+    related: rhbz#1546598
+  - IRQ affinity handled by scheduler plugin
+    resolves: rhbz#1590937
+
+* Mon Jun 11 2018 Jaroslav Škarvada <jskarvad@redhat.com> - 2.10.0-0.1.rc1
+- new release
+  - rebased tuned to latest upstream
+    resolves: rhbz#1546598
+  - script: show stderr output in the log
+    resolves: rhbz#1536476
+  - realtime-virtual-host: script.sh: add error checking
+    resolves: rhbz#1461509
+  - man: improved tuned-profiles-cpu-partitioning.7
+    resolves: rhbz#1548148
+  - bootloader: check if grub2_cfg_file_name is None in _remove_grub2_tuning()
+    resolves: rhbz#1571403
+  - plugin_scheduler: whitelist/blacklist processed also for thread names
+    resolves: rhbz#1512295
+  - bootloader: patch all GRUB2 config files
+    resolves: rhbz#1556990
+  - profiles: added mssql profile
+    resolves: rhbz#1442122
+  - tuned-adm: print log excerpt when changing profile
+    resolves: rhbz#1538745
+  - cpu-partitioning: use no_balance_cores instead of no_rebalance_cores
+    resolves: rhbz#1550573
+  - sysctl: support assignment modifiers as other plugins do
+    resolves: rhbz#1564092
+  - oracle: fixed ip_local_port_range parity warning
+    resolves: rhbz#1527219
+  - Fix verifying cpumask on systems with more than 32 cores
+    resolves: rhbz#1528368
+  - oracle: updated the profile to be in sync with KCS 39188
+    resolves: rhbz#1447323
+
 * Sun Oct 29 2017 Jaroslav Škarvada <jskarvad@redhat.com> - 2.9.0-1
 - new release
   - rebased tuned to latest upstream

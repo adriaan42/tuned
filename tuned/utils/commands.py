@@ -31,7 +31,7 @@ class commands:
 		return {"Y":"1", "YES":"1", "T":"1", "TRUE":"1", "N":"0", "NO":"0", "F":"0", "FALSE":"0"}.get(v, value)
 
 	def remove_ws(self, s):
-		return re.sub('\s+', ' ', s).strip()
+		return re.sub('\s+', ' ', str(s)).strip()
 
 	def unquote(self, v):
 		return re.sub("^\"(.*)\"$", r"\1", v)
@@ -62,7 +62,7 @@ class commands:
 	def re_lookup_compile(self, d):
 		if d is None:
 			return None
-		return re.compile("(%s)" % ")|(".join(d.keys()))
+		return re.compile("(%s)" % ")|(".join(list(d.keys())))
 
 	# Do multiple regex replaces in 's' according to lookup table described by
 	# dictionary 'd', e.g.: d = {"re1": "replace1", "re2": "replace2", ...}
@@ -76,7 +76,7 @@ class commands:
 				return s
 		if r is None:
 			r = self.re_lookup_compile(d)
-		return r.sub(lambda mo: d.values()[mo.lastindex - 1], s, flags)
+		return r.sub(lambda mo: list(d.values())[mo.lastindex - 1], s, flags)
 
 	# Do regex lookup on 's' according to lookup table described by
 	# dictionary 'd' and return corresponding value from the dictionary,
@@ -89,7 +89,7 @@ class commands:
 			r = self.re_lookup_compile(d)
 		mo = r.search(s)
 		if mo:
-			return d.values()[mo.lastindex - 1]
+			return list(d.values())[mo.lastindex - 1]
 		return None
 
 	def write_to_file(self, f, data, makedir = False, no_error = False):
@@ -211,7 +211,11 @@ class commands:
 		out = ""
 		err_msg = None
 		try:
-			proc = Popen(args, stdout = PIPE, stderr = PIPE, env = self._environment, shell = shell, cwd = cwd, close_fds = True)
+			proc = Popen(args, stdout = PIPE, stderr = PIPE, \
+					env = self._environment, \
+					shell = shell, cwd = cwd, \
+					close_fds = True, \
+					universal_newlines = True)
 			out, err = proc.communicate()
 
 			retcode = proc.returncode
@@ -255,17 +259,21 @@ class commands:
 		if mask is None:
 			return None
 		mask = str(mask).replace(",", "")
-		cpu = 0
-		cpus = []
 		try:
 			m = int(mask, 16)
 		except ValueError:
 			log.error("invalid hexadecimal mask '%s'" % str(mask))
 			return []
-		while m > 0:
-			if m & 1:
+		return self.bitmask2cpulist(m)
+
+	# Converts an integer bitmask to a list of cpus (e.g. [0,3,4])
+	def bitmask2cpulist(self, mask):
+		cpu = 0
+		cpus = []
+		while mask > 0:
+			if mask & 1:
 				cpus.append(cpu)
-			m >>= 1
+			mask >>= 1
 			cpu += 1
 		return cpus
 
@@ -315,7 +323,7 @@ class commands:
 			else:
 				try:
 					if len(vl) > 1:
-						rl += range(int(vl[0]), int(vl[1]) + 1)
+						rl += list(range(int(vl[0]), int(vl[1]) + 1))
 					else:
 						rl.append(int(vl[0]))
 				except ValueError:
@@ -362,12 +370,10 @@ class commands:
 	def cpulist2hex(self, l):
 		if l is None:
 			return None
-		m = 0
 		ul = self.cpulist_unpack(l)
 		if ul is None:
 			return None
-		for v in ul:
-			m |= pow(2, v)
+		m = self.cpulist2bitmask(ul)
 		s = "%x" % m
 		ls = len(s)
 		if ls % 8 != 0:
@@ -375,15 +381,21 @@ class commands:
 		s = s.zfill(ls)
 		return ",".join(s[i:i + 8] for i in range(0, len(s), 8))
 
+	def cpulist2bitmask(self, l):
+		m = 0
+		for v in l:
+			m |= pow(2, v)
+		return m
+
 	def process_recommend_file(self, fname):
 		matching_profile = None
 		try:
 			if not os.path.isfile(fname):
 				return None
 			config = ConfigObj(fname, list_values = False, interpolation = False)
-			for section in config.keys():
+			for section in list(config.keys()):
 				match = True
-				for option in config[section].keys():
+				for option in list(config[section].keys()):
 					value = config[section][option]
 					if value == "":
 						value = r"^$"

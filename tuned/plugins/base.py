@@ -113,7 +113,7 @@ class Plugin(object):
 
 	def destroy_instances(self):
 		"""Destroy all instances."""
-		for instance in self._instances.values():
+		for instance in list(self._instances.values()):
 			log.debug("destroying instance %s (%s)" % (instance.name, self.name))
 			self._destroy_instance(instance)
 		self._instances.clear()
@@ -151,7 +151,7 @@ class Plugin(object):
 				log.error("Plugin '%s' does not support the 'devices_udev_regex' option", self.name)
 				return set()
 			udev_devices = self._device_matcher_udev.match_list(instance.devices_udev_regex, udev_devices)
-			return set(map(lambda x: x.sys_name, udev_devices))
+			return set([x.sys_name for x in udev_devices])
 
 	def assign_free_devices(self, instance):
 		if not self._devices_supported:
@@ -221,10 +221,12 @@ class Plugin(object):
 				arguments.append("full_rollback")
 			arguments.append(dev)
 			log.info("calling script '%s' with arguments '%s'" % (script, str(arguments)))
-			log.debug("using environment '%s'" % str(environ.items()))
+			log.debug("using environment '%s'" % str(list(environ.items())))
 			try:
-				proc = Popen([script] +  arguments, stdout=PIPE, stderr=PIPE, close_fds=True, env=environ, \
-					cwd = dir_name)
+				proc = Popen([script] +  arguments, \
+						stdout=PIPE, stderr=PIPE, \
+						close_fds=True, env=environ, \
+						cwd = dir_name, universal_newlines = True)
 				out, err = proc.communicate()
 				if proc.returncode:
 					log.error("script '%s' error: %d, '%s'" % (script, proc.returncode, err[:-1]))
@@ -307,7 +309,7 @@ class Plugin(object):
 		self._cleanup_all_non_device_commands(instance)
 
 	def _instance_apply_dynamic(self, instance, device):
-		for option in filter(lambda opt: self._storage_get(instance, self._commands[opt], device) is None, self._options_used_by_dynamic):
+		for option in [opt for opt in self._options_used_by_dynamic if self._storage_get(instance, self._commands[opt], device) is None]:
 			self._check_and_save_value(instance, self._commands[option], device)
 
 		self._instance_update_dynamic(instance, device)
@@ -359,13 +361,13 @@ class Plugin(object):
 			self._commands[command_name] = info
 
 		# sort commands by priority
-		self._commands = collections.OrderedDict(sorted(self._commands.iteritems(), key=lambda (name, info): info["priority"]))
+		self._commands = collections.OrderedDict(sorted(iter(self._commands.items()), key=lambda name_info: name_info[1]["priority"]))
 
 	def _check_commands(self):
 		"""
 		Check if all commands are defined correctly.
 		"""
-		for command_name, command in self._commands.items():
+		for command_name, command in list(self._commands.items()):
 			# do not check custom commands
 			if command.get("custom", False):
 				continue
@@ -377,11 +379,14 @@ class Plugin(object):
 	# Operations with persistent storage for status data.
 	#
 
-	def _storage_key(self, instance_name, command_name, device_name=None):
-		if device_name is not None:
-			return "%s/%s/%s" % (command_name, instance_name, device_name)
-		else:
-			return "%s/%s" % (command_name, instance_name)
+	def _storage_key(self, instance_name = None, command_name = None,
+			device_name = None):
+		class_name = type(self).__name__
+		instance_name = "" if instance_name is None else instance_name
+		command_name = "" if command_name is None else command_name
+		device_name = "" if device_name is None else device_name
+		return "%s/%s/%s/%s" % (class_name, instance_name,
+				command_name, device_name)
 
 	def _storage_set(self, instance, command, value, device_name=None):
 		key = self._storage_key(instance.name, command["name"], device_name)
@@ -400,13 +405,13 @@ class Plugin(object):
 	#
 
 	def _execute_all_non_device_commands(self, instance):
-		for command in filter(lambda command: not command["per_device"], self._commands.values()):
+		for command in [command for command in list(self._commands.values()) if not command["per_device"]]:
 			new_value = self._variables.expand(instance.options.get(command["name"], None))
 			if new_value is not None:
 				self._execute_non_device_command(instance, command, new_value)
 
 	def _execute_all_device_commands(self, instance, devices):
-		for command in filter(lambda command: command["per_device"], self._commands.values()):
+		for command in [command for command in list(self._commands.values()) if command["per_device"]]:
 			new_value = self._variables.expand(instance.options.get(command["name"], None))
 			if new_value is None:
 				continue
@@ -415,7 +420,7 @@ class Plugin(object):
 
 	def _verify_all_non_device_commands(self, instance, ignore_missing):
 		ret = True
-		for command in filter(lambda command: not command["per_device"], self._commands.values()):
+		for command in [command for command in list(self._commands.values()) if not command["per_device"]]:
 			new_value = self._variables.expand(instance.options.get(command["name"], None))
 			if new_value is not None:
 				if self._verify_non_device_command(instance, command, new_value, ignore_missing) == False:
@@ -424,7 +429,7 @@ class Plugin(object):
 
 	def _verify_all_device_commands(self, instance, devices, ignore_missing):
 		ret = True
-		for command in filter(lambda command: command["per_device"], self._commands.values()):
+		for command in [command for command in list(self._commands.values()) if command["per_device"]]:
 			new_value = instance.options.get(command["name"], None)
 			if new_value is None:
 				continue
@@ -488,8 +493,8 @@ class Plugin(object):
 
 	def _norm_value(self, value):
 		v = self._cmd.unquote(str(value))
-		if re.match(r'\s*(0+,)+[\da-fA-F]*\s*$', v):
-			return re.sub(r'^\s*(0+,)+', "", v)
+		if re.match(r'\s*(0+,?)+([\da-fA-F]*,?)*\s*$', v):
+			return re.sub(r'^\s*(0+,?)+', "", v)
 		return v
 
 	def _verify_value(self, name, new_value, current_value, ignore_missing, device = None):
@@ -513,6 +518,13 @@ class Plugin(object):
 					ret = int(new_value, 16) == int(current_value, 16)
 				except ValueError:
 					ret = str(new_value) == str(current_value)
+					if not ret:
+						vals = str(new_value).split('|')
+						for val in vals:
+							val = val.strip()
+							ret = val == current_value
+							if ret:
+								break
 		if ret:
 			if device is None:
 				log.info(consts.STR_VERIFY_PROFILE_VALUE_OK % (name, str(current_value).strip()))
@@ -547,12 +559,12 @@ class Plugin(object):
 		return self._verify_value(command["name"], new_value, current_value, ignore_missing)
 
 	def _cleanup_all_non_device_commands(self, instance):
-		for command in reversed(filter(lambda command: not command["per_device"], self._commands.values())):
+		for command in reversed([command for command in list(self._commands.values()) if not command["per_device"]]):
 			if (instance.options.get(command["name"], None) is not None) or (command["name"] in self._options_used_by_dynamic):
 				self._cleanup_non_device_command(instance, command)
 
 	def _cleanup_all_device_commands(self, instance, devices):
-		for command in reversed(filter(lambda command: command["per_device"], self._commands.values())):
+		for command in reversed([command for command in list(self._commands.values()) if command["per_device"]]):
 			if (instance.options.get(command["name"], None) is not None) or (command["name"] in self._options_used_by_dynamic):
 				for device in devices:
 					self._cleanup_device_command(instance, command, device)

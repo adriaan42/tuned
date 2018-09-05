@@ -1,7 +1,7 @@
-import base
-from decorators import *
+from . import base
+from .decorators import *
 import tuned.logs
-import exceptions
+from . import exceptions
 from tuned.utils.commands import commands
 import tuned.consts as consts
 
@@ -20,7 +20,7 @@ class SystemdPlugin(base.Plugin):
 	def __init__(self, *args, **kwargs):
 		if not os.path.isfile(consts.SYSTEMD_SYSTEM_CONF_FILE):
 			raise exceptions.NotSupportedPluginException("Required systemd '%s' configuration file not found, disabling plugin." % consts.SYSTEMD_SYSTEM_CONF_FILE)
-		super(self.__class__, self).__init__(*args, **kwargs)
+		super(SystemdPlugin, self).__init__(*args, **kwargs)
 		self._cmd = commands()
 
 	def _instance_init(self, instance):
@@ -99,7 +99,7 @@ class SystemdPlugin(base.Plugin):
 		if full_rollback:
 			log.info("removing '%s' systemd tuning previously added by Tuned" % consts.SYSTEMD_CPUAFFINITY_VAR)
 			self._remove_systemd_tuning()
-			log.info("you may need to manualy run 'dracut -f' to update the systemd configuration in initrd image")
+			log.console("you may need to manualy run 'dracut -f' to update the systemd configuration in initrd image")
 
 	# convert cpulist from systemd syntax to Tuned syntax and unpack it
 	def _cpulist_convert_unpack(self, cpulist):

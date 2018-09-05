@@ -27,12 +27,29 @@ TMPFILESDIR_DETECT = $(shell pkg-config systemd --variable tmpfilesdir || rpm --
 TMPFILESDIR = $(TMPFILESDIR_DETECT:%{_tmpfilesdir}=$(TMPFILESDIR_FALLBACK))
 VERSIONED_NAME = $(NAME)-$(VERSION)$(GIT_PSUFFIX)
 
+SYSCONFDIR = /etc
 DATADIR = /usr/share
 DOCDIR = $(DATADIR)/doc/$(NAME)
-PYTHON_SITELIB = $(shell python -c 'from distutils.sysconfig import get_python_lib; print get_python_lib();' || echo /usr/lib/python2.7/site-packages)
+PYTHON = python3
+PYLINT = pylint-3
+ifeq ($(PYTHON),python2)
+PYLINT = pylint-2
+endif
+SHEBANG_REWRITE_REGEX= '1s/^(\#!\/usr\/bin\/)\<python\>/\1$(PYTHON)/'
+PYTHON_SITELIB = $(shell $(PYTHON) -c 'from distutils.sysconfig import get_python_lib; print(get_python_lib());')
+ifeq ($(PYTHON_SITELIB),)
+$(error Failed to determine python library directory)
+endif
 TUNED_PROFILESDIR = /usr/lib/tuned
 TUNED_RECOMMEND_DIR = $(TUNED_PROFILESDIR)/recommend.d
+TUNED_USER_RECOMMEND_DIR = $(SYSCONFDIR)/tuned/recommend.d
 BASH_COMPLETIONS = $(DATADIR)/bash-completion/completions
+
+copy_executable = install -Dm 0755 $(1) $(2)
+rewrite_shebang = sed -i -r -e $(SHEBANG_REWRITE_REGEX) $(1)
+restore_timestamp = touch -r $(1) $(2)
+install_python_script = $(call copy_executable,$(1),$(2)) \
+	&& $(call rewrite_shebang,$(2)) && $(call restore_timestamp,$(1),$(2));
 
 release-dir:
 	mkdir -p $(VERSIONED_NAME)
@@ -101,45 +118,51 @@ install-dirs:
 	mkdir -p $(DESTDIR)/var/log/tuned
 	mkdir -p $(DESTDIR)/run/tuned
 	mkdir -p $(DESTDIR)$(DOCDIR)
+	mkdir -p $(DESTDIR)$(SYSCONFDIR)
 	mkdir -p $(DESTDIR)$(TUNED_RECOMMEND_DIR)
+	mkdir -p $(DESTDIR)$(TUNED_USER_RECOMMEND_DIR)
 
 install: install-dirs
 	# library
 	cp -a tuned $(DESTDIR)$(PYTHON_SITELIB)
 
 	# binaries
-	install -Dpm 0755 tuned.py $(DESTDIR)/usr/sbin/tuned
-	install -Dpm 0755 tuned-adm.py $(DESTDIR)/usr/sbin/tuned-adm
-	install -Dpm 0755 tuned-gui.py $(DESTDIR)/usr/sbin/tuned-gui
-	$(foreach file, $(wildcard systemtap/*), \
-		install -Dpm 0755 $(file) $(DESTDIR)/usr/sbin/$(notdir $(file));)
+	$(call install_python_script,tuned.py,$(DESTDIR)/usr/sbin/tuned)
+	$(call install_python_script,tuned-adm.py,$(DESTDIR)/usr/sbin/tuned-adm)
+	$(call install_python_script,tuned-gui.py,$(DESTDIR)/usr/sbin/tuned-gui)
+
+	$(foreach file, diskdevstat netdevstat scomes, \
+		install -Dpm 0755 systemtap/$(file) $(DESTDIR)/usr/sbin/$(notdir $(file));)
+	$(call install_python_script, \
+		systemtap/varnetload, $(DESTDIR)/usr/sbin/varnetload)
 
 	# glade
 	install -Dpm 0644 tuned-gui.glade $(DESTDIR)$(DATADIR)/tuned/ui/tuned-gui.glade
 
 	# tools
-	install -Dpm 0755 experiments/powertop2tuned.py $(DESTDIR)/usr/bin/powertop2tuned
+	$(call install_python_script, \
+		 experiments/powertop2tuned.py, $(DESTDIR)/usr/bin/powertop2tuned)
 
 	# configuration files
-	install -Dpm 0644 tuned-main.conf $(DESTDIR)/etc/tuned/tuned-main.conf
+	install -Dpm 0644 tuned-main.conf $(DESTDIR)$(SYSCONFDIR)/tuned/tuned-main.conf
 	# None profile in the moment, autodetection will be used
-	echo -n > $(DESTDIR)/etc/tuned/active_profile
-	echo -n > $(DESTDIR)/etc/tuned/profile_mode
-	install -Dpm 0644 bootcmdline $(DESTDIR)/etc/tuned/bootcmdline
-	install -Dpm 0644 modules.conf $(DESTDIR)/etc/modprobe.d/tuned.conf
+	echo -n > $(DESTDIR)$(SYSCONFDIR)/tuned/active_profile
+	echo -n > $(DESTDIR)$(SYSCONFDIR)/tuned/profile_mode
+	install -Dpm 0644 bootcmdline $(DESTDIR)$(SYSCONFDIR)/tuned/bootcmdline
+	install -Dpm 0644 modules.conf $(DESTDIR)$(SYSCONFDIR)/modprobe.d/tuned.conf
 
 	# profiles & system config
 	cp -a profiles/* $(DESTDIR)$(TUNED_PROFILESDIR)/
 	mv $(DESTDIR)$(TUNED_PROFILESDIR)/realtime/realtime-variables.conf \
-		$(DESTDIR)/etc/tuned/realtime-variables.conf
+		$(DESTDIR)$(SYSCONFDIR)/tuned/realtime-variables.conf
 	mv $(DESTDIR)$(TUNED_PROFILESDIR)/realtime-virtual-guest/realtime-virtual-guest-variables.conf \
-		$(DESTDIR)/etc/tuned/realtime-virtual-guest-variables.conf
+		$(DESTDIR)$(SYSCONFDIR)/tuned/realtime-virtual-guest-variables.conf
 	mv $(DESTDIR)$(TUNED_PROFILESDIR)/realtime-virtual-host/realtime-virtual-host-variables.conf \
-		$(DESTDIR)/etc/tuned/realtime-virtual-host-variables.conf
+		$(DESTDIR)$(SYSCONFDIR)/tuned/realtime-virtual-host-variables.conf
 	mv $(DESTDIR)$(TUNED_PROFILESDIR)/cpu-partitioning/cpu-partitioning-variables.conf \
-		$(DESTDIR)/etc/tuned/cpu-partitioning-variables.conf
+		$(DESTDIR)$(SYSCONFDIR)/tuned/cpu-partitioning-variables.conf
 	mv $(DESTDIR)$(TUNED_PROFILESDIR)/sap-hana-vmware/sap-hana-vmware-variables.conf \
-		$(DESTDIR)/etc/tuned/sap-hana-vmware-variables.conf
+		$(DESTDIR)$(SYSCONFDIR)/tuned/sap-hana-vmware-variables.conf
 	install -pm 0644 recommend.conf $(DESTDIR)$(TUNED_RECOMMEND_DIR)/50-tuned.conf
 
 	# bash completion
@@ -152,10 +175,10 @@ install: install-dirs
 	install -Dpm 0644 tuned.service $(DESTDIR)$(UNITDIR)/tuned.service
 
 	# dbus configuration
-	install -Dpm 0644 dbus.conf $(DESTDIR)/etc/dbus-1/system.d/com.redhat.tuned.conf
+	install -Dpm 0644 dbus.conf $(DESTDIR)$(SYSCONFDIR)/dbus-1/system.d/com.redhat.tuned.conf
 
 	# grub template
-	install -Dpm 0755 00_tuned $(DESTDIR)/etc/grub.d/00_tuned
+	install -Dpm 0755 00_tuned $(DESTDIR)$(SYSCONFDIR)/grub.d/00_tuned
 
 	# polkit configuration
 	install -Dpm 0644 com.redhat.tuned.policy $(DESTDIR)$(DATADIR)/polkit-1/actions/com.redhat.tuned.policy
@@ -171,7 +194,8 @@ install: install-dirs
 
 	# libexec scripts
 	$(foreach file, $(wildcard libexec/*), \
-		install -Dpm 0755 $(file) $(DESTDIR)/usr/libexec/tuned/$(notdir $(file));)
+		$(call install_python_script, \
+			$(file), $(DESTDIR)/usr/libexec/tuned/$(notdir $(file))))
 
 	# icon
 	install -Dpm 0644 icons/tuned.svg $(DESTDIR)$(DATADIR)/icons/hicolor/scalable/apps/tuned.svg
@@ -185,9 +209,9 @@ clean:
 	rm -rf $(VERSIONED_NAME) rpm-build-dir
 
 test:
-	python -m unittest discover tests
+	$(PYTHON) -m unittest discover tests
 
 lint:
-	pylint -E -f parseable tuned *.py
+	$(PYLINT) -E -f parseable tuned *.py
 
 .PHONY: clean archive srpm tag test lint

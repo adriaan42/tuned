@@ -1,3 +1,5 @@
+import logging
+
 GLOBAL_CONFIG_FILE = "/etc/tuned/tuned-main.conf"
 ACTIVE_PROFILE_FILE = "/etc/tuned/active_profile"
 PROFILE_MODE_FILE = "/etc/tuned/profile_mode"
@@ -21,7 +23,7 @@ ERROR_THRESHOLD = 3
 
 # bootloader plugin configuration
 BOOT_DIR = "/boot"
-GRUB2_CFG_FILES = ["/boot/grub2/grub.cfg", "/boot/efi/EFI/redhat/grub.cfg", "/boot/efi/EFI/fedora/grub.cfg"]
+GRUB2_CFG_FILES = ["/etc/grub2.cfg", "/etc/grub2-efi.cfg"]
 GRUB2_CFG_DIR = "/etc/grub.d"
 GRUB2_TUNED_TEMPLATE_NAME = "00_tuned"
 GRUB2_TUNED_TEMPLATE_PATH = GRUB2_CFG_DIR + "/" + GRUB2_TUNED_TEMPLATE_NAME
@@ -34,6 +36,7 @@ INITRD_IMAGE_DIR = "/boot"
 BOOT_CMDLINE_TUNED_VAR = "TUNED_BOOT_CMDLINE"
 BOOT_CMDLINE_INITRD_ADD_VAR = "TUNED_BOOT_INITRD_ADD"
 BOOT_CMDLINE_FILE = "/etc/tuned/bootcmdline"
+PETITBOOT_DETECT_DIR = "/sys/firmware/opal"
 
 # modules plugin configuration
 MODULES_FILE = "/etc/modprobe.d/tuned.conf"
@@ -109,3 +112,15 @@ ADMIN_TIMEOUT = 600
 # was set automatically or manually
 ACTIVE_PROFILE_AUTO = "auto"
 ACTIVE_PROFILE_MANUAL = "manual"
+
+LOG_LEVEL_CONSOLE = 60
+LOG_LEVEL_CONSOLE_NAME = "CONSOLE"
+CAPTURE_LOG_LEVEL = "console"
+CAPTURE_LOG_LEVELS = {
+		"debug": logging.DEBUG,
+		"info": logging.INFO,
+		"warn": logging.WARN,
+		"error": logging.ERROR,
+		"console": LOG_LEVEL_CONSOLE,
+		"none": None,
+		}

@@ -1,5 +1,5 @@
-import base
-from decorators import *
+from . import base
+from .decorators import *
 import tuned.logs
 from tuned.utils.commands import commands
 import tuned.consts as consts
@@ -19,7 +19,7 @@ class CPULatencyPlugin(base.Plugin):
 	"""
 
 	def __init__(self, *args, **kwargs):
-		super(self.__class__, self).__init__(*args, **kwargs)
+		super(CPULatencyPlugin, self).__init__(*args, **kwargs)
 
 		self._has_pm_qos = True
 		self._has_energy_perf_bias = True
@@ -41,7 +41,7 @@ class CPULatencyPlugin(base.Plugin):
 		self._assigned_devices = set()
 
 	def _get_device_objects(self, devices):
-		return map(lambda x: self._hardware_inventory.get_device("cpu", x), devices)
+		return [self._hardware_inventory.get_device("cpu", x) for x in devices]
 
 	@classmethod
 	def _get_config_options(self):
@@ -95,7 +95,7 @@ class CPULatencyPlugin(base.Plugin):
 		instance._has_dynamic_tuning = False
 
 		# only the first instance of the plugin can control the latency
-		if self._instances.values()[0] == instance:
+		if list(self._instances.values())[0] == instance:
 			instance._first_instance = True
 			try:
 				self._cpu_latency_fd = os.open(consts.PATH_CPU_DMA_LATENCY, os.O_WRONLY)
@@ -142,7 +142,7 @@ class CPULatencyPlugin(base.Plugin):
 		return v
 
 	def _instance_apply_static(self, instance):
-		super(self.__class__, self)._instance_apply_static(instance)
+		super(CPULatencyPlugin, self)._instance_apply_static(instance)
 
 		if not instance._first_instance:
 			return
@@ -156,7 +156,7 @@ class CPULatencyPlugin(base.Plugin):
 			self._no_turbo_save = self._getset_intel_pstate_attr("no_turbo", instance.options["no_turbo"])
 
 	def _instance_unapply_static(self, instance, full_rollback = False):
-		super(self.__class__, self)._instance_unapply_static(instance, full_rollback)
+		super(CPULatencyPlugin, self)._instance_unapply_static(instance, full_rollback)
 
 		if instance._first_instance and self._has_intel_pstate:
 			self._set_intel_pstate_attr("min_perf_pct", self._min_perf_pct_save)
@@ -236,7 +236,7 @@ class CPULatencyPlugin(base.Plugin):
 		if governor is None:
 			log.debug("ignoring sampling_down_factor setting for CPU '%s', cannot match governor" % device)
 			return None
-		if governor not in self._governors_map.values():
+		if governor not in list(self._governors_map.values()):
 			self._governors_map[device] = governor
 			path = self._sampling_down_factor_path(governor)
 			if not os.path.exists(path):
@@ -258,6 +258,15 @@ class CPULatencyPlugin(base.Plugin):
 			return None
 		return self._cmd.read_file(path).strip()
 
+	def _try_set_energy_perf_bias(self, cpu_id, value):
+		(retcode, out, err_msg) = self._cmd.execute(
+				["x86_energy_perf_policy",
+				"-c", cpu_id,
+				str(value)
+				],
+				return_err = True)
+		return (retcode, err_msg)
+
 	@command_set("energy_perf_bias", per_device=True)
 	def _set_energy_perf_bias(self, energy_perf_bias, device, sim):
 		if not self._is_cpu_online(device):
@@ -266,8 +275,27 @@ class CPULatencyPlugin(base.Plugin):
 		if self._has_energy_perf_bias:
 			if not sim:
 				cpu_id = device.lstrip("cpu")
-				log.info("setting energy_perf_bias '%s' on cpu '%s'" % (energy_perf_bias, device))
-				self._cmd.execute(["x86_energy_perf_policy", "-c", cpu_id, str(energy_perf_bias)])
+				vals = energy_perf_bias.split('|')
+				for val in vals:
+					val = val.strip()
+					log.debug("Trying to set energy_perf_bias to '%s' on cpu '%s'"
+							% (val, device))
+					(retcode, err_msg) = self._try_set_energy_perf_bias(
+							cpu_id, val)
+					if retcode == 0:
+						log.info("energy_perf_bias successfully set to '%s' on cpu '%s'"
+								% (val, device))
+						break
+					elif retcode < 0:
+						log.error("Failed to set energy_perf_bias: %s"
+								% err_msg)
+						break
+					else:
+						log.debug("Could not set energy_perf_bias to '%s' on cpu '%s', trying another value"
+								% (val, device))
+				else:
+					log.error("Failed to set energy_perf_bias on cpu '%s'. Is the value in the profile correct?"
+							% device)
 			return str(energy_perf_bias)
 		else:
 			return None
@@ -282,8 +310,18 @@ class CPULatencyPlugin(base.Plugin):
 				v = s
 		return v
 
+	# Before Linux 4.13
 	def _energy_perf_policy_to_human(self, s):
 		return {0:"performance", 6:"normal", 15:"powersave"}.get(self._try_parse_num(s), s)
+
+	# Since Linux 4.13
+	def _energy_perf_policy_to_human_v2(self, s):
+		return {0:"performance",
+				4:"balance-performance",
+				6:"normal",
+				8:"balance-power",
+				15:"power",
+				}.get(self._try_parse_num(s), s)
 
 	@command_get("energy_perf_bias")
 	def _get_energy_perf_bias(self, device, ignore_missing=False):
@@ -299,6 +337,9 @@ class CPULatencyPlugin(base.Plugin):
 					l = line.split()
 					if len(l) == 2:
 						energy_perf_bias = self._energy_perf_policy_to_human(l[1])
+						break
+					elif len(l) == 3:
+						energy_perf_bias = self._energy_perf_policy_to_human_v2(l[2])
 						break
 
 		return energy_perf_bias

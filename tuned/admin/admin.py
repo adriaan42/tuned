@@ -1,8 +1,9 @@
+
 from __future__ import print_function
 import tuned.admin
 from tuned.utils.commands import commands
 from tuned.profiles import Locator as profiles_locator
-from exceptions import TunedAdminDBusException
+from .exceptions import TunedAdminDBusException
 from tuned.exceptions import TunedException
 import tuned.consts as consts
 import os
@@ -10,9 +11,12 @@ import sys
 import errno
 import time
 import threading
+import logging
 
 class Admin(object):
-	def __init__(self, dbus = True, debug = False, async = False, timeout = consts.ADMIN_TIMEOUT):
+	def __init__(self, dbus = True, debug = False, async = False,
+			timeout = consts.ADMIN_TIMEOUT,
+			log_level = logging.ERROR):
 		self._dbus = dbus
 		self._debug = debug
 		self._async = async
@@ -24,6 +28,8 @@ class Admin(object):
 		self._daemon_action_result = True
 		self._daemon_action_errstr = ""
 		self._controller = None
+		self._log_token = None
+		self._log_level = log_level
 		if self._dbus:
 			self._controller = tuned.admin.DBusController(consts.DBUS_BUS, consts.DBUS_INTERFACE, consts.DBUS_OBJECT, debug)
 			try:
@@ -71,6 +77,8 @@ class Admin(object):
 				return False
 		if self._dbus:
 			try:
+				self._controller.set_on_exit_action(
+						self._log_capture_finish)
 				self._controller.set_action(action_dbus, *args, **kwargs)
 				res = self._controller.run()
 			except TunedAdminDBusException as e:
@@ -94,7 +102,7 @@ class Admin(object):
 			profile_names = self._controller.profiles2()
 		except TunedAdminDBusException as e:
 			# fallback to older API
-			profile_names = map(lambda profile:(profile, ""), self._controller.profiles())
+			profile_names = [(profile, "") for profile in self._controller.profiles()]
 		self._print_profiles(profile_names)
 		self._action_dbus_active()
 		return self._controller.exit(True)
@@ -217,6 +225,18 @@ class Admin(object):
 				return self._controller.exit(True)
 		return False
 
+	def _log_capture_finish(self):
+		if self._log_token is None or self._log_token == "":
+			return
+		try:
+			log_msgs = self._controller.log_capture_finish(
+					self._log_token)
+			self._log_token = None
+			print(log_msgs, end = "", file = sys.stderr)
+			sys.stderr.flush()
+		except TunedAdminDBusException as e:
+			self._error("Error: Failed to stop log capture. Restart the Tuned daemon to prevent a memory leak.")
+
 	def _action_dbus_profile(self, profiles):
 		if len(profiles) == 0:
 			return self._action_dbus_list()
@@ -224,6 +244,11 @@ class Admin(object):
 		if profile_name == "":
 			return self._controller.exit(False)
 		self._daemon_action_finished.clear()
+		if not self._async and self._log_level is not None:
+			# 25 seconds default DBus timeout + 5 secs safety margin
+			timeout = self._timeout + 25 + 5
+			self._log_token = self._controller.log_capture_start(
+					self._log_level, timeout)
 		(ret, msg) = self._controller.switch_profile(profile_name)
 		if self._async or not ret:
 			return self._controller.exit(self._profile_print_status(ret, msg))
@@ -265,6 +290,11 @@ class Admin(object):
 	def _action_dbus_auto_profile(self):
 		profile_name = self._controller.recommend_profile()
 		self._daemon_action_finished.clear()
+		if not self._async and self._log_level is not None:
+			# 25 seconds default DBus timeout + 5 secs safety margin
+			timeout = self._timeout + 25 + 5
+			self._log_token = self._controller.log_capture_start(
+					self._log_level, timeout)
 		(ret, msg) = self._controller.auto_profile()
 		if self._async or not ret:
 			return self._controller.exit(self._profile_print_status(ret, msg))
@@ -307,6 +337,10 @@ class Admin(object):
 		return False
 
 	def _action_dbus_off(self):
+		# 25 seconds default DBus timeout + 5 secs safety margin
+		timeout = 25 + 5
+		self._log_token = self._controller.log_capture_start(
+				self._log_level, timeout)
 		ret = self._controller.off()
 		if not ret:
 			self._error("Cannot disable active profile.")
