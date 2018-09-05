@@ -3,100 +3,15 @@ Subject: install files to /usr/lib instead of libexec
  Debian has no /usr/libexec
 Forwarded: no
 diff --git a/Makefile b/Makefile
-index e499237..90cb16d 100644
+index 16049d6..78130f0 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -171,7 +171,7 @@ install: install-dirs
-
+@@ -195,7 +195,7 @@ install: install-dirs
  	# libexec scripts
  	$(foreach file, $(wildcard libexec/*), \
--		install -Dpm 0755 $(file) $(DESTDIR)/usr/libexec/tuned/$(notdir $(file));)
-+		install -Dpm 0755 $(file) $(DESTDIR)/usr/lib/tuned/$(notdir $(file));)
+ 		$(call install_python_script, \
+-			$(file), $(DESTDIR)/usr/libexec/tuned/$(notdir $(file))))
++			$(file), $(DESTDIR)/usr/lib/tuned/$(notdir $(file))))
  
  	# icon
  	install -Dpm 0644 icons/tuned.svg $(DESTDIR)$(DATADIR)/icons/hicolor/scalable/apps/tuned.svg
-diff --git a/profiles/cpu-partitioning/script.sh b/profiles/cpu-partitioning/script.sh
-index d42ea24..3f08c4d 100755
---- a/profiles/cpu-partitioning/script.sh
-+++ b/profiles/cpu-partitioning/script.sh
-@@ -39,7 +39,7 @@ start() {
-     mkdir -p "${TUNED_tmpdir}/usr/lib/dracut/hooks/pre-udev"
-     cp /etc/systemd/system.conf "${TUNED_tmpdir}/etc/systemd/"
-     cp 00-tuned-pre-udev.sh "${TUNED_tmpdir}/usr/lib/dracut/hooks/pre-udev/"
--    python /usr/libexec/tuned/defirqaffinity.py "remove" "$TUNED_isolated_cores_expanded" &&
-+    python /usr/lib/tuned/defirqaffinity.py "remove" "$TUNED_isolated_cores_expanded" &&
-     sed -i '/^IRQBALANCE_BANNED_CPUS=/d' /etc/sysconfig/irqbalance
-     echo "IRQBALANCE_BANNED_CPUS=$TUNED_isolated_cpumask" >>/etc/sysconfig/irqbalance
-     setup_kvm_mod_low_latency
-@@ -51,7 +51,7 @@ start() {
- }
-
- stop() {
--    python /usr/libexec/tuned/defirqaffinity.py "add" "$TUNED_isolated_cores_expanded"
-+    python /usr/lib/tuned/defirqaffinity.py "add" "$TUNED_isolated_cores_expanded"
-     if [ "$1" = "full_rollback" ]
-     then
-         sed -i '/^IRQBALANCE_BANNED_CPUS=/d' /etc/sysconfig/irqbalance
-@@ -63,7 +63,7 @@ stop() {
- }
- 
- verify() {
--    python /usr/libexec/tuned/defirqaffinity.py "verify" "$TUNED_isolated_cores_expanded"
-+    python /usr/lib/tuned/defirqaffinity.py "verify" "$TUNED_isolated_cores_expanded"
-     return "$?"
- }
- 
-diff --git a/profiles/realtime-virtual-guest/script.sh b/profiles/realtime-virtual-guest/script.sh
-index 46855d2..e70ddb5 100755
---- a/profiles/realtime-virtual-guest/script.sh
-+++ b/profiles/realtime-virtual-guest/script.sh
-@@ -3,17 +3,17 @@
- . /usr/lib/tuned/functions
- 
- start() {
--    python /usr/libexec/tuned/defirqaffinity.py "remove" "$TUNED_isolated_cores_expanded" &&
-+    python /usr/lib/tuned/defirqaffinity.py "remove" "$TUNED_isolated_cores_expanded" &&
-     return "$?"
- }
- 
- stop() {
--    python /usr/libexec/tuned/defirqaffinity.py "add" "$TUNED_isolated_cores_expanded"
-+    python /usr/lib/tuned/defirqaffinity.py "add" "$TUNED_isolated_cores_expanded"
-     return "$?"
- }
- 
- verify() {
--    python /usr/libexec/tuned/defirqaffinity.py "verify" "$TUNED_isolated_cores_expanded"
-+    python /usr/lib/tuned/defirqaffinity.py "verify" "$TUNED_isolated_cores_expanded"
-     return "$?"
- }
- 
-diff --git a/profiles/realtime-virtual-host/script.sh b/profiles/realtime-virtual-host/script.sh
-index 7b68164..3721541 100755
---- a/profiles/realtime-virtual-host/script.sh
-+++ b/profiles/realtime-virtual-host/script.sh
-@@ -5,7 +5,7 @@
- ltanfile=/sys/module/kvm/parameters/lapic_timer_advance_ns
- 
- start() {
--    python /usr/libexec/tuned/defirqaffinity.py "remove" "$TUNED_isolated_cores_expanded" &&
-+    python /usr/lib/tuned/defirqaffinity.py "remove" "$TUNED_isolated_cores_expanded" &&
-     retval = "$?"
-
-     if [ ! $retval -eq 0 ]; then
-@@ -49,13 +49,13 @@ start() {
-
- stop() {
-     [ "$1" = "full_rollback" ] && teardown_kvm_mod_low_latency
--    python /usr/libexec/tuned/defirqaffinity.py "add" "$TUNED_isolated_cores_expanded"
-+    python /usr/lib/tuned/defirqaffinity.py "add" "$TUNED_isolated_cores_expanded"
-     enable_ksm
-     return "$?"
- }
- 
- verify() {
--    python /usr/libexec/tuned/defirqaffinity.py "verify" "$TUNED_isolated_cores_expanded"
-+    python /usr/lib/tuned/defirqaffinity.py "verify" "$TUNED_isolated_cores_expanded"
-     retval = "$?"
-     if [ $retval -eq 0 -a -f /sys/module/kvm/parameters/kvmclock_periodic_sync ]; then
-         retval = `cat /sys/module/kvm/parameters/kvmclock_periodic_sync`
