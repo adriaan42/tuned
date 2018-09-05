@@ -41,6 +41,7 @@ usr/lib/tuned/functions
 usr/lib/tuned/laptop-ac-powersave/
 usr/lib/tuned/laptop-battery-powersave/
 usr/lib/tuned/latency-performance/
+usr/lib/tuned/mssql/
 usr/lib/tuned/network-latency/
 usr/lib/tuned/network-throughput/
 usr/lib/tuned/oracle/
