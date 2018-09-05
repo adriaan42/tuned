@@ -9,13 +9,13 @@ Build-Depends: debhelper (>= 10.3),
                ethtool,
                hdparm,
                pkg-config,
-               python-all,
-               python-configobj,
-               python-dbus,
-               python-decorator,
-               python-flexmock,
-               python-gi,
-               python-pyudev,
+               python3-all,
+               python3-configobj,
+               python3-dbus,
+               python3-decorator,
+               python3-flexmock,
+               python3-gi,
+               python3-pyudev,
                systemd
 Standards-Version: 4.2.1
 Homepage: https://tuned-project.org/
@@ -30,14 +30,14 @@ Depends: dbus,
          hdparm,
          policykit-1 (>= 0.105-17~),
          procps,
-         python-configobj,
-         python-dbus,
-         python-decorator,
-         python-gi,
-         python-pyudev,
+         python3-configobj,
+         python3-dbus,
+         python3-decorator,
+         python3-gi,
+         python3-pyudev,
          virt-what,
          ${misc:Depends},
-         ${python:Depends}
+         ${python3:Depends}
 Recommends: linux-cpupower
 Description: daemon for monitoring and adaptive tuning of system devices
  The tuned package contains a daemon that tunes system settings dynamically.
@@ -50,10 +50,10 @@ Package: tuned-gtk
 Architecture: all
 Depends: gir1.2-gtk-3.0,
          powertop,
-         python-gi,
+         python3-gi,
          tuned (= ${binary:Version}),
          ${misc:Depends},
-         ${python:Depends}
+         ${python3:Depends}
 Description: GTK+ GUI for tuned
  The tuned package contains a daemon that tunes system settings dynamically.
  It does so by monitoring the usage of several system components periodically.
@@ -69,7 +69,7 @@ Architecture: all
 Depends: powertop,
          tuned (= ${binary:Version}),
          ${misc:Depends},
-         ${python:Depends}
+         ${python3:Depends}
 Description: various tuned utilities
  The tuned package contains a daemon that tunes system settings dynamically.
  It does so by monitoring the usage of several system components periodically.
@@ -85,7 +85,7 @@ Architecture: all
 Depends: systemtap,
          tuned (= ${binary:Version}),
          ${misc:Depends},
-         ${python:Depends}
+         ${python3:Depends}
 Description: disk and net statistic monitoring systemtap scripts
  The tuned package contains a daemon that tunes system settings dynamically.
  It does so by monitoring the usage of several system components periodically.
