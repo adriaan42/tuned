@@ -1,3 +1,16 @@
+tuned (2.10.0-1) unstable; urgency=medium
+
+  * New upstream release (Closes: #908053)
+  * refresh libexec.patch
+  * move Vcs to salsa
+  * install mssql files
+  * Standards-Version: 4.2.1
+  * https homepage
+  * Switch to Python3 (Closes: #908052)
+  * backport upstream patch for python 3.7 compat
+
+ -- Evgeni Golov <evgeni@debian.org>  Wed, 05 Sep 2018 20:05:36 +0200
+
 tuned (2.9.0-1) unstable; urgency=medium
 
   * New upstream release.
