@@ -1,0 +1,51 @@
+commit f19b7c5713acb76a200811f6531acf2791505cac
+Author: Jaroslav Škarvada <jskarvad@redhat.com>
+Date:   Wed Jul 4 23:27:38 2018 +0200
+
+    Fixed compatibility with python-3.7
+    
+    In python-3.7 async is a keyword, so it cannot be redefined.
+    
+    Signed-off-by: Jaroslav Škarvada <jskarvad@redhat.com>
+
+diff --git a/tuned-adm.py b/tuned-adm.py
+index ea85c54..1b9623d 100755
+--- a/tuned-adm.py
++++ b/tuned-adm.py
+@@ -98,7 +98,7 @@ if __name__ == "__main__":
+ 
+ 	options = vars(args)
+ 	debug = options.pop("debug")
+-	async = options.pop("async")
++	asynco = options.pop("async")
+ 	timeout = options.pop("timeout")
+ 	action_name = options.pop("action")
+ 	log_level = options.pop("loglevel")
+@@ -107,7 +107,7 @@ if __name__ == "__main__":
+ 	dbus = config.get_bool(consts.CFG_DAEMON, consts.CFG_DEF_DAEMON)
+ 
+ 	try:
+-		admin = tuned.admin.Admin(dbus, debug, async, timeout, log_level)
++		admin = tuned.admin.Admin(dbus, debug, asynco, timeout, log_level)
+ 
+ 		result = admin.action(action_name, **options)
+ 	except:
+diff --git a/tuned/admin/admin.py b/tuned/admin/admin.py
+index 728af32..3f84413 100644
+--- a/tuned/admin/admin.py
++++ b/tuned/admin/admin.py
+@@ -14,12 +14,12 @@ import threading
+ import logging
+ 
+ class Admin(object):
+-	def __init__(self, dbus = True, debug = False, async = False,
++	def __init__(self, dbus = True, debug = False, asynco = False,
+ 			timeout = consts.ADMIN_TIMEOUT,
+ 			log_level = logging.ERROR):
+ 		self._dbus = dbus
+ 		self._debug = debug
+-		self._async = async
++		self._async = asynco
+ 		self._timeout = timeout
+ 		self._cmd = commands(debug)
+ 		self._profiles_locator = profiles_locator(consts.LOAD_DIRECTORIES)
