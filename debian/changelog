@@ -8,8 +8,9 @@ tuned (2.10.0-1) unstable; urgency=medium
   * https homepage
   * Switch to Python3 (Closes: #908052)
   * backport upstream patch for python 3.7 compat
+  * backport upstream patch to fix tuned-adm w/o action
 
- -- Evgeni Golov <evgeni@debian.org>  Wed, 05 Sep 2018 20:05:36 +0200
+ -- Evgeni Golov <evgeni@debian.org>  Thu, 06 Sep 2018 11:53:03 +0200
 
 tuned (2.9.0-1) unstable; urgency=medium
 
