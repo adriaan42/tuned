@@ -5,10 +5,10 @@ etc/tuned/active_profile
 etc/tuned/profile_mode
 etc/tuned/bootcmdline
 etc/tuned/cpu-partitioning-variables.conf
+etc/tuned/post_loaded_profile
 etc/tuned/realtime-variables.conf
 etc/tuned/realtime-virtual-guest-variables.conf
 etc/tuned/realtime-virtual-host-variables.conf
-etc/tuned/sap-hana-vmware-variables.conf
 etc/tuned/tuned-main.conf
 lib/systemd/system/tuned.service
 usr/lib/python*/dist-packages/tuned/__init__.py
@@ -50,10 +50,10 @@ usr/lib/tuned/realtime-virtual-guest/
 usr/lib/tuned/realtime-virtual-host/
 usr/lib/tuned/realtime/
 usr/lib/tuned/recommend.d/
-usr/lib/tuned/sap-hana-vmware/
 usr/lib/tuned/sap-hana/
 usr/lib/tuned/sap-netweaver/
 usr/lib/tuned/server-powersave/
+usr/lib/tuned/spectrumscale-ece/
 usr/lib/tuned/spindown-disk/
 usr/lib/tuned/throughput-performance/
 usr/lib/tuned/virtual-guest/
