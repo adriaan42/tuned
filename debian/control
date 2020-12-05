@@ -28,6 +28,7 @@ Depends: dbus,
          ethtool,
          gawk,
          hdparm,
+         ncat,
          policykit-1 (>= 0.105-17~),
          procps,
          python3-configobj,
@@ -38,7 +39,7 @@ Depends: dbus,
          virt-what,
          ${misc:Depends},
          ${python3:Depends}
-Recommends: linux-cpupower
+Recommends: linux-cpupower, python3-dmidecode
 Description: daemon for monitoring and adaptive tuning of system devices
  The tuned package contains a daemon that tunes system settings dynamically.
  It does so by monitoring the usage of several system components periodically.
