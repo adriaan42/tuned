@@ -6,12 +6,6 @@
 %:
 	dh $@ --with python3,systemd
 
-override_dh_install:
-	# Debian currently does not ship python-perf from src:linux
-	# see https://bugs.debian.org/860957 for details
-	$(RM) -f $(CURDIR)/debian/tmp/usr/lib/python*/dist-packages/tuned/plugins/plugin_scheduler.py
-	dh_install
-
 override_dh_missing:
 	dh_missing --fail-missing
 
