@@ -4,9 +4,7 @@ import copy
 import os
 import shutil
 import tuned.consts as consts
-from configobj import ConfigObj, ConfigObjError
 import re
-import procfs
 from subprocess import *
 from tuned.exceptions import TunedException
 
@@ -15,7 +13,6 @@ log = tuned.logs.get()
 class commands:
 
 	def __init__(self, logging = True):
-		self._environment = None
 		self._logging = logging
 
 	def _error(self, msg):
@@ -198,21 +195,25 @@ class commands:
 
 		return self.write_to_file(f, data)
 
+	# returns machine ID or empty string "" in case of error
+	def get_machine_id(self, no_error = True):
+		return self.read_file(consts.MACHINE_ID_FILE, no_error).strip()
+
 	# "no_errors" can be list of return codes not treated as errors, if 0 is in no_errors, it means any error
 	# returns (retcode, out), where retcode is exit code of the executed process or -errno if
 	# OSError or IOError exception happened
-	def execute(self, args, shell = False, cwd = None, no_errors = [], return_err = False):
+	def execute(self, args, shell = False, cwd = None, env = {}, no_errors = [], return_err = False):
 		retcode = 0
-		if self._environment is None:
-			self._environment = os.environ.copy()
-			self._environment["LC_ALL"] = "C"
+		_environment = os.environ.copy()
+		_environment["LC_ALL"] = "C"
+		_environment.update(env)
 
 		self._debug("Executing %s." % str(args))
 		out = ""
 		err_msg = None
 		try:
 			proc = Popen(args, stdout = PIPE, stderr = PIPE, \
-					env = self._environment, \
+					env = _environment, \
 					shell = shell, cwd = cwd, \
 					close_fds = True, \
 					universal_newlines = True)
@@ -310,7 +311,18 @@ class commands:
 					hexmask = True
 					hv = sv
 				elif sv and (sv[0] == "^" or sv[0] == "!"):
-					negation_list.append(int(sv[1:]))
+					nl = sv[1:].split("-")
+					try:
+						if (len(nl) > 1):
+							negation_list += list(range(
+								int(nl[0]),
+								int(nl[1]) + 1
+								)
+							)
+						else:
+							negation_list.append(int(sv[1:]))
+					except ValueError:
+						return []
 				else:
 					if len(sv) > 0:
 						ll2.append(sv)
@@ -363,8 +375,8 @@ class commands:
 	# Inverts CPU list (i.e. makes its complement)
 	def cpulist_invert(self, l):
 		cpus = self.cpulist_unpack(l)
-		present = self.cpulist_unpack(self.read_file("/sys/devices/system/cpu/present"))
-		return list(set(present) - set(cpus))
+		online = self.cpulist_unpack(self.read_file("/sys/devices/system/cpu/online"))
+		return list(set(online) - set(cpus))
 
 	# Converts CPU list to hexadecimal CPU mask
 	def cpulist2hex(self, l):
@@ -387,65 +399,8 @@ class commands:
 			m |= pow(2, v)
 		return m
 
-	def process_recommend_file(self, fname):
-		matching_profile = None
-		try:
-			if not os.path.isfile(fname):
-				return None
-			config = ConfigObj(fname, list_values = False, interpolation = False)
-			for section in list(config.keys()):
-				match = True
-				for option in list(config[section].keys()):
-					value = config[section][option]
-					if value == "":
-						value = r"^$"
-					if option == "virt":
-						if not re.match(value, self.execute("virt-what")[1], re.S):
-							match = False
-					elif option == "system":
-						if not re.match(value, self.read_file(consts.SYSTEM_RELEASE_FILE), re.S):
-							match = False
-					elif option[0] == "/":
-						if not os.path.exists(option) or not re.match(value, self.read_file(option), re.S):
-							match = False
-					elif option[0:7] == "process":
-						ps = procfs.pidstats()
-						ps.reload_threads()
-						if len(ps.find_by_regex(re.compile(value))) == 0:
-							match = False
-				if match:
-					# remove the ",.*" suffix
-					r = re.compile(r",[^,]*$")
-					matching_profile = r.sub("", section)
-					break
-		except (IOError, OSError, ConfigObjError) as e:
-			log.error("error processing '%s', %s" % (fname, e))
-		return matching_profile
-
-	def recommend_profile(self, hardcoded = False):
-		profile = consts.DEFAULT_PROFILE
-		if hardcoded:
-			return profile
-		matching = self.process_recommend_file(consts.RECOMMEND_CONF_FILE)
-		if matching is not None:
-			return matching
-		files = {}
-		for directory in consts.RECOMMEND_DIRECTORIES:
-			contents = []
-			try:
-				contents = os.listdir(directory)
-			except OSError as e:
-				if e.errno != errno.ENOENT:
-					log.error("error accessing %s: %s" % (directory, e))
-			for name in contents:
-				path = os.path.join(directory, name)
-				files[name] = path
-		for name in sorted(files.keys()):
-			path = files[name]
-			matching = self.process_recommend_file(path)
-			if matching is not None:
-				return matching
-		return profile
+	def cpulist2string(self, l):
+		return ",".join(str(v) for v in l)
 
 	# Do not make balancing on patched Python 2 interpreter (rhbz#1028122).
 	# It means less CPU usage on patchet interpreter. On non-patched interpreter
@@ -519,3 +474,25 @@ class commands:
 				f.write(mode + "\n")
 		except (OSError,IOError) as e:
 			raise TunedException("Failed to save profile mode: %s" % e.strerror)
+
+	def get_post_loaded_profile(self):
+		profile_name = ""
+		try:
+			with open(consts.POST_LOADED_PROFILE_FILE, "r") as f:
+				profile_name = f.read().strip()
+		except IOError as e:
+			if e.errno != errno.ENOENT:
+				raise TunedException("Failed to read the active post-loaded profile: %s" % e)
+		except (OSError, EOFError) as e:
+			raise TunedException("Failed to read the active post-loaded profile: %s" % e)
+		if profile_name == "":
+			profile_name = None
+		return profile_name
+
+	def save_post_loaded_profile(self, profile_name):
+		try:
+			with open(consts.POST_LOADED_PROFILE_FILE, "w") as f:
+				if profile_name is not None:
+					f.write(profile_name + "\n")
+		except (OSError,IOError) as e:
+			raise TunedException("Failed to save the active post-loaded profile: %s" % e.strerror)

@@ -62,11 +62,17 @@ class Loader(object):
 			del(final_profile.units["variables"])
 		# FIXME hack, do all variable expansions in one place
 		self._expand_vars_in_devices(final_profile)
+		self._expand_vars_in_regexes(final_profile)
 		return final_profile
 
 	def _expand_vars_in_devices(self, profile):
 		for unit in profile.units:
 			profile.units[unit].devices = self._variables.expand(profile.units[unit].devices)
+
+	def _expand_vars_in_regexes(self, profile):
+		for unit in profile.units:
+			profile.units[unit].cpuinfo_regex = self._variables.expand(profile.units[unit].cpuinfo_regex)
+			profile.units[unit].uname_regex = self._variables.expand(profile.units[unit].uname_regex)
 
 	def _load_profile(self, profile_names, profiles, processed_files):
 		for name in profile_names:
@@ -78,8 +84,8 @@ class Loader(object):
 			config = self._load_config_data(filename)
 			profile = self._profile_factory.create(name, config)
 			if "include" in profile.options:
-				include_name = self._variables.expand(profile.options.pop("include"))
-				self._load_profile([include_name], profiles, processed_files)
+				include_names = re.split(r"\b\s*[,;]\s*", self._variables.expand(profile.options.pop("include")))
+				self._load_profile(include_names, profiles, processed_files)
 
 			profiles.append(profile)
 

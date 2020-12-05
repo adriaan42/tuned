@@ -1,20 +1,26 @@
 import collections
+import re
 
 class Unit(object):
 	"""
 	Unit description.
 	"""
 
-	__slots__ = [ "_name", "_type", "_enabled", "_replace", "_devices", "_devices_udev_regex", \
-		"_script_pre", "_script_post", "_options" ]
+	__slots__ = [ "_name", "_type", "_enabled", "_replace", "_drop", "_devices", "_devices_udev_regex", \
+		"_cpuinfo_regex", "_uname_regex", "_script_pre", "_script_post", "_options" ]
 
 	def __init__(self, name, config):
 		self._name = name
 		self._type = config.pop("type", self._name)
-		self._enabled = config.pop("enabled", True) in [True, "true", 1]
-		self._replace = config.pop("replace", False) in [True, "true", 1]
+		self._enabled = config.pop("enabled", True) in [True, "True", "true", 1, "1"]
+		self._replace = config.pop("replace", False) in [True, "True", "true", 1, "1"]
+		self._drop = config.pop("drop", None)
+		if self._drop is not None:
+			self._drop = re.split(r"\b\s*[,;]\s*", str(self._drop))
 		self._devices = config.pop("devices", "*")
 		self._devices_udev_regex = config.pop("devices_udev_regex", None)
+		self._cpuinfo_regex = config.pop("cpuinfo_regex", None)
+		self._uname_regex = config.pop("uname_regex", None)
 		self._script_pre = config.pop("script_pre", None)
 		self._script_post = config.pop("script_post", None)
 		self._options = collections.OrderedDict(config)
@@ -44,6 +50,14 @@ class Unit(object):
 		return self._replace
 
 	@property
+	def drop(self):
+		return self._drop
+
+	@drop.setter
+	def drop(self, value):
+		self._drop = value
+
+	@property
 	def devices(self):
 		return self._devices
 
@@ -58,6 +72,22 @@ class Unit(object):
 	@devices_udev_regex.setter
 	def devices_udev_regex(self, value):
 		self._devices_udev_regex = value
+
+	@property
+	def cpuinfo_regex(self):
+		return self._cpuinfo_regex
+
+	@cpuinfo_regex.setter
+	def cpuinfo_regex(self, value):
+		self._cpuinfo_regex = value
+
+	@property
+	def uname_regex(self):
+		return self._uname_regex
+
+	@uname_regex.setter
+	def uname_regex(self, value):
+		self._uname_regex = value
 
 	@property
 	def script_pre(self):

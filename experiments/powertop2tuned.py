@@ -1,4 +1,4 @@
-#!/usr/bin/python -Es
+#!/usr/bin/python3 -Es
 # -*- coding: utf-8 -*-
 #
 # Copyright (C) 2008-2013 Red Hat, Inc.
@@ -65,7 +65,7 @@ TUNED_CONF_INCLUDE = """[main]
 TUNED_CONF_EPILOG="""\n[powertop_script]
 type=script
 replace=1
-script=script.sh
+script=${i:PROFILE_DIR}/script.sh
 """
 
 
@@ -96,7 +96,7 @@ class PowertopHTMLParser(HTMLParser):
 
 	def handle_starttag(self, tag, attrs):
 		self.lastStartTag = tag
-		if self.lastStartTag == "div" and dict(attrs).get("id")  == "tuning":
+		if self.lastStartTag == "div" and dict(attrs).get("id")  in ["tuning", "wakeup"]:
 			self.inProperTable = True
 		if self.inProperTable and tag == "td":
 			self.tdCounter += 1

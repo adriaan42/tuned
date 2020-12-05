@@ -61,7 +61,6 @@ class BootloaderPlugin(base.Plugin):
 				effective[key] = options[key]
 			else:
 				log.warn("Unknown option '%s' for plugin '%s'." % (key, self.__class__.__name__))
-		cmdline_keys.sort()
 		cmdline = ""
 		for key in cmdline_keys:
 			val = options[key]
@@ -93,10 +92,10 @@ class BootloaderPlugin(base.Plugin):
 		return self._cmd.add_modify_option_in_file(consts.BOOT_CMDLINE_FILE, d)
 
 	def _remove_grub2_tuning(self):
-		if not self._grub2_cfg_file_names:
-			log.error("cannot find grub.cfg to patch, you need to regenerate it by hand using grub2-mkconfig")
-			return
 		self._patch_bootcmdline({consts.BOOT_CMDLINE_TUNED_VAR : "", consts.BOOT_CMDLINE_INITRD_ADD_VAR : ""})
+		if not self._grub2_cfg_file_names:
+			log.info("cannot find grub.cfg to patch")
+			return
 		for f in self._grub2_cfg_file_names:
 			self._cmd.add_modify_option_in_file(f, {"set\s+" + consts.GRUB2_TUNED_VAR : "", "set\s+" + consts.GRUB2_TUNED_INITRD_VAR : ""}, add = False)
 		if self._initrd_dst_img_val is not None:
@@ -107,6 +106,7 @@ class BootloaderPlugin(base.Plugin):
 		if full_rollback:
 			log.info("removing grub2 tuning previously added by Tuned")
 			self._remove_grub2_tuning()
+			self._update_grubenv({"tuned_params" : "", "tuned_initrd" : ""})
 
 	def _grub2_cfg_unpatch(self, grub2_cfg):
 		log.debug("unpatching grub.cfg")
@@ -138,7 +138,7 @@ class BootloaderPlugin(base.Plugin):
 	def _grub2_default_env_patch(self):
 		grub2_default_env = self._cmd.read_file(consts.GRUB2_DEFAULT_ENV_FILE)
 		if len(grub2_default_env) <= 0:
-			log.error("error reading '%s'" % consts.GRUB2_DEFAULT_ENV_FILE)
+			log.info("cannot read '%s'" % consts.GRUB2_DEFAULT_ENV_FILE)
 			return False
 
 		d = {"GRUB_CMDLINE_LINUX_DEFAULT" : consts.GRUB2_TUNED_VAR, "GRUB_INITRD_OVERLAY" : consts.GRUB2_TUNED_INITRD_VAR}
@@ -157,13 +157,13 @@ class BootloaderPlugin(base.Plugin):
 	def _grub2_cfg_patch(self, d):
 		log.debug("patching grub.cfg")
 		if not self._grub2_cfg_file_names:
-			log.error("cannot find grub.cfg to patch, you need to regenerate it by hand by grub2-mkconfig")
+			log.info("cannot find grub.cfg to patch")
 			return False
 		for f in self._grub2_cfg_file_names:
 			grub2_cfg = self._cmd.read_file(f)
 			if len(grub2_cfg) <= 0:
-				log.error("error patching %s, you need to regenerate it by hand by grub2-mkconfig" % f)
-				return False
+				log.info("cannot patch %s" % f)
+				continue
 			log.debug("adding boot command line parameters to '%s'" % f)
 			grub2_cfg_new = grub2_cfg
 			patch_initial = False
@@ -186,6 +186,37 @@ class BootloaderPlugin(base.Plugin):
 	def _grub2_update(self):
 		self._grub2_cfg_patch({consts.GRUB2_TUNED_VAR : self._cmdline_val, consts.GRUB2_TUNED_INITRD_VAR : self._initrd_val})
 		self._patch_bootcmdline({consts.BOOT_CMDLINE_TUNED_VAR : self._cmdline_val, consts.BOOT_CMDLINE_INITRD_ADD_VAR : self._initrd_val})
+
+	def _has_bls(self):
+		return os.path.exists(consts.BLS_ENTRIES_PATH)
+
+	def _update_grubenv(self, d):
+		log.debug("updating grubenv, setting %s" % str(d));
+		l = ["%s=%s" % (str(option), str(value)) for option, value in d.items()]
+		(rc, out) = self._cmd.execute(["grub2-editenv", "-", "set"] + l)
+		if rc != 0:
+			log.warn("cannot update grubenv: '%s'" % out)
+			return False;
+		return True
+
+	def _bls_entries_patch_initial(self):
+		machine_id = self._cmd.get_machine_id()
+		if machine_id == "":
+			return False
+		log.debug("running kernel update hook '%s' to patch BLS entries" % consts.KERNEL_UPDATE_HOOK_FILE)
+		(rc, out) = self._cmd.execute([consts.KERNEL_UPDATE_HOOK_FILE, "add"], env = {"KERNEL_INSTALL_MACHINE_ID" : machine_id})
+		if rc != 0:
+			log.warn("cannot patch BLS entries: '%s'" % out)
+			return False
+		return True
+
+	def _bls_update(self):
+		log.debug("updating BLS")
+		if self._has_bls() and \
+			self._update_grubenv({"tuned_params" : self._cmdline_val, "tuned_initrd" : self._initrd_val}) and \
+			self._bls_entries_patch_initial():
+				return True
+		return False
 
 	def _init_initrd_dst_img(self, name):
 		if self._initrd_dst_img_val is None:
@@ -307,4 +338,5 @@ class BootloaderPlugin(base.Plugin):
 	def _instance_post_static(self, instance, enabling):
 		if enabling and self.update_grub2_cfg:
 			self._grub2_update()
+			self._bls_update()
 			self.update_grub2_cfg = False

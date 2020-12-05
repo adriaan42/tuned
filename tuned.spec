@@ -16,8 +16,10 @@
 
 %if %{with python3}
 %global _py python3
+%global make_python_arg PYTHON=%{__python3}
 %else
 %{!?python2_sitelib:%global python2_sitelib %{python_sitelib}}
+%global make_python_arg PYTHON=%{__python2}
 %if 0%{?rhel} && 0%{?rhel} < 8
 %global _py python
 %else
@@ -41,29 +43,50 @@
 
 Summary: A dynamic adaptive system tuning daemon
 Name: tuned
-Version: 2.10.0
+Version: 2.14.0
 Release: 1%{?prerel1}%{?with_snapshot:.%{git_suffix}}%{?dist}
 License: GPLv2+
-Source0: https://github.com/redhat-performance/%{name}/archive/v%{version}%{?prerel2}.tar.gz#/%{name}-%{version}%{?prerel1}.tar.gz
+Source0: https://github.com/redhat-performance/%{name}/archive/v%{version}%{?prerel2}/%{name}-%{version}%{?prerel2}.tar.gz
 URL: http://www.tuned-project.org/
 BuildArch: noarch
 BuildRequires: systemd, desktop-file-utils
+%if 0%{?rhel}
+BuildRequires: asciidoc
+%else
+BuildRequires: asciidoctor
+%endif
 Requires(post): systemd, virt-what
 Requires(preun): systemd
 Requires(postun): systemd
 BuildRequires: %{_py}, %{_py}-devel
+# BuildRequires for 'make test'
+BuildRequires: %{_py}-configobj
+BuildRequires: %{_py}-decorator, %{_py}-pyudev
 Requires: %{_py}-decorator, %{_py}-pyudev, %{_py}-configobj
 Requires: %{_py}-schedutils, %{_py}-linux-procfs, %{_py}-perf
 # requires for packages with inconsistent python2/3 names
 %if %{with python3}
+# BuildRequires for 'make test'
+BuildRequires: python3-dbus, python3-gobject-base
 Requires: python3-dbus, python3-gobject-base
+%if 0%{?fedora} > 22 || 0%{?rhel} > 7
+Recommends: python3-dmidecode
+%endif
 %else
+# BuildRequires for 'make test'
+BuildRequires: dbus-python, pygobject3-base
 Requires: dbus-python, pygobject3-base
+%if 0%{?fedora} > 22 || 0%{?rhel} > 7
+Recommends: python-dmidecode
+%endif
 %endif
 Requires: virt-what, ethtool, gawk, hdparm
 Requires: util-linux, dbus, polkit
 %if 0%{?fedora} > 22 || 0%{?rhel} > 7
 Recommends: kernel-tools
+%endif
+%if 0%{?rhel} > 7
+Requires: python3-syspurpose
 %endif
 
 %description
@@ -173,6 +196,7 @@ Summary: Additional tuned profile(s) targeted to Network Function Virtualization
 Requires: %{name} = %{version}
 Requires: %{name}-profiles-realtime = %{version}
 Requires: tuna
+Requires: nmap-ncat
 %if 0%{?rhel} == 7
 Requires: qemu-kvm-tools-rhev
 %else
@@ -199,6 +223,13 @@ Requires: %{name} = %{version}
 %description profiles-cpu-partitioning
 Additional tuned profile(s) optimized for CPU partitioning.
 
+%package profiles-spectrumscale
+Summary: Additional tuned profile(s) optimized for IBM Spectrum Scale
+Requires: %{name} = %{version}
+
+%description profiles-spectrumscale
+Additional tuned profile(s) optimized for IBM Spectrum Scale.
+
 %package profiles-compat
 Summary: Additional tuned profiles mainly for backward compatibility with tuned 1.0
 Requires: %{name} = %{version}
@@ -211,16 +242,21 @@ It can be also used to fine tune your system for specific scenarios.
 %setup -q -n %{name}-%{version}%{?prerel2}
 
 %build
+# Docs cannot be generated on RHEL now due to missing asciidoctor dependency
+# asciidoc doesn't seem to be compatible
+%if ! 0%{?rhel}
+make html %{make_python_arg}
+%endif
 
 %install
-make install DESTDIR=%{buildroot} DOCDIR=%{docdir} \
-%if %{with python3}
-	PYTHON=python3
-%else
-	PYTHON=python2
-%endif
+make install DESTDIR=%{buildroot} DOCDIR=%{docdir} %{make_python_arg}
 %if 0%{?rhel}
 sed -i 's/\(dynamic_tuning[ \t]*=[ \t]*\).*/\10/' %{buildroot}%{_sysconfdir}/tuned/tuned-main.conf
+%endif
+
+%if ! 0%{?rhel}
+# manual
+make install-html DESTDIR=%{buildroot} DOCDIR=%{docdir}
 %endif
 
 # conditional support for grub2, grub2 is not available on all architectures
@@ -238,6 +274,9 @@ touch %{buildroot}%{_sysconfdir}/modprobe.d/kvm.rt.tuned.conf
 
 # validate desktop file
 desktop-file-validate %{buildroot}%{_datadir}/applications/tuned-gui.desktop
+
+%check
+make test
 
 %post
 %systemd_post tuned.service
@@ -273,6 +312,24 @@ if [ "$1" == 0 ]; then
   if [ -r "%{_sysconfdir}/default/grub" ]; then
     sed -i '/GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT:+$GRUB_CMDLINE_LINUX_DEFAULT }\\$tuned_params"/d' %{_sysconfdir}/default/grub
   fi
+
+# cleanup for Boot loader specification (BLS)
+
+# clear grubenv variables
+  grub2-editenv - unset tuned_params tuned_initrd &>/dev/null || :
+# unpatch BLS entries
+  MACHINE_ID=`cat /etc/machine-id 2>/dev/null`
+  if [ "$MACHINE_ID" ]
+  then
+    for f in /boot/loader/entries/$MACHINE_ID-*.conf
+    do
+      if [ -f "$f" -a "${f: -12}" != "-rescue.conf" ]
+      then
+        sed -i '/^\s*options\s\+.*\$tuned_params/ s/\s\+\$tuned_params\b//g' "$f" &>/dev/null || :
+        sed -i '/^\s*initrd\s\+.*\$tuned_initrd/ s/\s\+\$tuned_initrd\b//g' "$f" &>/dev/null || :
+      fi
+    done
+  fi
 fi
 
 
@@ -290,21 +347,6 @@ if [ -d %{_sysconfdir}/grub.d ]; then
   selinuxenabled &>/dev/null && \
     restorecon %{_sysconfdir}/grub.d/00_tuned &>/dev/null || :
 fi
-
-
-%post gtk
-/bin/touch --no-create %{_datadir}/icons/hicolor &>/dev/null || :
-
-
-%postun gtk
-if [ $1 -eq 0 ] ; then
-    /bin/touch --no-create %{_datadir}/icons/hicolor &>/dev/null
-    /usr/bin/gtk-update-icon-cache -f %{_datadir}/icons/hicolor &>/dev/null || :
-fi
-
-
-%posttrans gtk
-/usr/bin/gtk-update-icon-cache -f %{_datadir}/icons/hicolor &>/dev/null || :
 
 
 %files
@@ -327,7 +369,6 @@ fi
 %exclude %{_sysconfdir}/tuned/realtime-virtual-guest-variables.conf
 %exclude %{_sysconfdir}/tuned/realtime-virtual-host-variables.conf
 %exclude %{_sysconfdir}/tuned/cpu-partitioning-variables.conf
-%exclude %{_sysconfdir}/tuned/sap-hana-vmware-variables.conf
 %exclude %{_prefix}/lib/tuned/default
 %exclude %{_prefix}/lib/tuned/desktop-powersave
 %exclude %{_prefix}/lib/tuned/laptop-ac-powersave
@@ -337,7 +378,6 @@ fi
 %exclude %{_prefix}/lib/tuned/spindown-disk
 %exclude %{_prefix}/lib/tuned/sap-netweaver
 %exclude %{_prefix}/lib/tuned/sap-hana
-%exclude %{_prefix}/lib/tuned/sap-hana-vmware
 %exclude %{_prefix}/lib/tuned/mssql
 %exclude %{_prefix}/lib/tuned/oracle
 %exclude %{_prefix}/lib/tuned/atomic-host
@@ -346,6 +386,7 @@ fi
 %exclude %{_prefix}/lib/tuned/realtime-virtual-guest
 %exclude %{_prefix}/lib/tuned/realtime-virtual-host
 %exclude %{_prefix}/lib/tuned/cpu-partitioning
+%exclude %{_prefix}/lib/tuned/spectrumscale-ece
 %{_prefix}/lib/tuned
 %dir %{_sysconfdir}/tuned
 %dir %{_sysconfdir}/tuned/recommend.d
@@ -353,6 +394,7 @@ fi
 %{_libexecdir}/tuned/defirqaffinity*
 %config(noreplace) %verify(not size mtime md5) %{_sysconfdir}/tuned/active_profile
 %config(noreplace) %verify(not size mtime md5) %{_sysconfdir}/tuned/profile_mode
+%config(noreplace) %verify(not size mtime md5) %{_sysconfdir}/tuned/post_loaded_profile
 %config(noreplace) %{_sysconfdir}/tuned/tuned-main.conf
 %config(noreplace) %verify(not size mtime md5) %{_sysconfdir}/tuned/bootcmdline
 %{_sysconfdir}/dbus-1/system.d/com.redhat.tuned.conf
@@ -369,6 +411,7 @@ fi
 %{_datadir}/tuned/grub2
 %{_datadir}/polkit-1/actions/com.redhat.tuned.policy
 %ghost %{_sysconfdir}/modprobe.d/kvm.rt.tuned.conf
+%{_prefix}/lib/kernel/install.d/92-tuned.install
 
 %files gtk
 %defattr(-,root,root,-)
@@ -379,7 +422,6 @@ fi
 %{python2_sitelib}/tuned/gtk
 %endif
 %{_datadir}/tuned/ui
-%{_datadir}/polkit-1/actions/com.redhat.tuned.gui.policy
 %{_datadir}/icons/hicolor/scalable/apps/tuned.svg
 %{_datadir}/applications/tuned-gui.desktop
 
@@ -409,9 +451,7 @@ fi
 
 %files profiles-sap-hana
 %defattr(-,root,root,-)
-%config(noreplace) %{_sysconfdir}/tuned/sap-hana-vmware-variables.conf
 %{_prefix}/lib/tuned/sap-hana
-%{_prefix}/lib/tuned/sap-hana-vmware
 %{_mandir}/man7/tuned-profiles-sap-hana.7*
 
 %files profiles-mssql
@@ -458,6 +498,11 @@ fi
 %{_prefix}/lib/tuned/cpu-partitioning
 %{_mandir}/man7/tuned-profiles-cpu-partitioning.7*
 
+%files profiles-spectrumscale
+%defattr(-,root,root,-)
+%{_prefix}/lib/tuned/spectrumscale-ece
+%{_mandir}/man7/tuned-profiles-spectrumscale-ece.7*
+
 %files profiles-compat
 %defattr(-,root,root,-)
 %{_prefix}/lib/tuned/default
@@ -470,6 +515,144 @@ fi
 %{_mandir}/man7/tuned-profiles-compat.7*
 
 %changelog
+* Mon Jun 15 2020 Jaroslav Škarvada <jskarvad@redhat.com> - 2.14.0-1
+- new release
+  - rebased tuned to latest upstream
+    related: rhbz#1792264
+
+* Mon Jun  8 2020 Jaroslav Škarvada <jskarvad@redhat.com> - 2.14.0-0.1.rc1
+- new release
+  - rebased tuned to latest upstream
+    resolves: rhbz#1792264
+  - oracle: turned off NUMA balancing
+    resolves: rhbz#1782233
+  - man: documented the possibility to apply multiple profiles
+    resolves: rhbz#1794337
+  - cpu-partitioning: disabled kernel.timer_migration
+    resolves: rhbz#1797629
+  - profiles: new profile optimize-serial-console
+    resolves: rhbz#1840689
+  - added support for a post-loaded profile
+    resolves: rhbz#1798183
+  - plugins: new irqbalance plugin
+    resolves: rhbz#1784645
+  - throughput-performance: added architecture specific tuning for Marvell ThunderX
+    resolves: rhbz#1746961
+  - throughput-performance: added architecture specific tuning for AMD
+    resolves: rhbz#1746957
+  - scheduler: added support for cgroups
+    resolves: rhbz#1784648
+
+* Wed Dec 11 2019 Jaroslav Škarvada <jskarvad@redhat.com> - 2.13.0-1
+- new release
+  - rebased tuned to latest upstream
+    related: rhbz#1738250
+  - sap-hana: updated tuning
+    resolves: rhbz#1779821
+  - latency-performance: updated tuning
+    resolves: rhbz#1779759
+  - added sst profile
+    resolves: rhbz#1743879
+
+* Sun Dec  1 2019 Jaroslav Škarvada <jskarvad@redhat.com> - 2.13.0-0.1.rc1
+- new release
+  - rebased tuned to latest upstream
+    resolves: rhbz#1738250
+  - cpu: fixed checking if EPB is supported
+    resolves: rhbz#1690929
+  - scheduler: fixed IRQ SMP affinity verification to respect ignore_missing
+    resolves: rhbz#1729936
+  - realtime: enabled ktimer_lockless_check
+    resolves: rhbz#1734096
+  - plugins: support cpuinfo_regex and uname_regex matching
+    resolves: rhbz#1748965
+  - sysctl: made reapply_sysctl ignore configs from /usr
+    resolves: rhbz#1759597
+  - added support for multiple include directives
+    resolves: rhbz#1760390
+  - realtime: added nowatchdog kernel command line option
+    resolves: rhbz#1767614
+
+* Thu Jun 27 2019 Jaroslav Škarvada <jskarvad@redhat.com> - 2.12.0-1
+- new release
+  - rebased tuned to latest upstream
+    related: rhbz#1685585
+
+* Wed Jun 12 2019 Jaroslav Škarvada <jskarvad@redhat.com> - 2.12.0-0.1.rc1
+- new release
+  - rebased tuned to latest upstream
+    resolves: rhbz#1685585
+  - sap-netweaver: changed values of kernel.shmall and kernel.shmmax to RHEL-8 defaults
+    resolves: rhbz#1708418
+  - sap-netweaver: changed value of kernel.sem to RHEL-8 default
+    resolves: rhbz#1701394
+  - sap-hana-vmware: dropped profile
+    resolves: rhbz#1715541
+  - s2kb function: fixed to be compatible with python3
+    resolves: rhbz#1684122
+  - do fallback to the powersave governor (balanced and powersave profiles)
+    resolves: rhbz#1679205
+  - added support for negation of CPU list
+    resolves: rhbz#1676588
+  - switched from sysctl tool to own implementation
+    resolves: rhbz#1666678
+  - realtime-virtual-host: added tsc-deadline=on to qemu cmdline
+    resolves: rhbz#1554458
+  - fixed handling of devices that have been removed and re-attached
+    resolves: rhbz#1677730
+
+* Thu Mar 21 2019 Jaroslav Škarvada <jskarvad@redhat.com> - 2.11.0-1
+- new release
+  - rebased tuned to latest upstream
+    related: rhbz#1643654
+  - used dmidecode only on x86 architectures
+    resolves: rhbz#1688371
+  - recommend: fixed to work without tuned daemon running
+    resolves: rhbz#1687397
+
+* Sun Mar 10 2019 Jaroslav Škarvada <jskarvad@redhat.com> - 2.11.0-0.1.rc1
+- new release
+  - rebased tuned to latest upstream
+    resolves: rhbz#1643654
+  - use online CPUs for cpusets calculations instead of present CPUs
+    resolves: rhbz#1613478
+  - realtime-virtual-guest: run script.sh
+    related: rhbz#1616043
+  - make python-dmidecode a weak dependency
+    resolves: rhbz#1565598
+  - make virtual-host identical to latency-performance
+    resolves: rhbz#1588932
+  - added support for Boot loader specification (BLS)
+    resolves: rhbz#1576435
+  - scheduler: keep polling file objects alive long enough
+    resolves: rhbz#1659140
+  - mssql: updated tuning
+    resolves: rhbz#1660178
+  - s2kb: fixed to be compatible with python3
+    resolves: rhbz#1684122
+  - profiles: fallback to the 'powersave' scaling governor
+    resolves: rhbz#1679205
+  - disable KSM only once, re-enable it only on full rollback
+    resolves: rhbz#1622239
+  - functions: reworked setup_kvm_mod_low_latency to count with kernel changes
+    resolves: rhbz#1649408
+  - updated virtual-host profile
+    resolves: rhbz#1569375
+  - added log message for unsupported parameters in plugin_net
+    resolves: rhbz#1533852
+  - added range feature for cpu exclusion
+    resolves: rhbz#1533908
+  - make a copy of devices when verifying tuning
+    resolves: rhbz#1592743
+  - fixed disk plugin/plugout problem
+    resolves: rhbz#1595156
+  - fixed unit configuration reading
+    resolves: rhbz#1613379
+  - reload profile configuration on SIGHUP
+    resolves: rhbz#1631744
+  - use built-in functionality to apply system sysctl
+    resolves: rhbz#1663412
+
 * Wed Jul  4 2018 Jaroslav Škarvada <jskarvad@redhat.com> - 2.10.0-1
 - new release
   - rebased tuned to latest upstream

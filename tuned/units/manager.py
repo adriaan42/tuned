@@ -1,9 +1,13 @@
 import collections
+import os
+import re
 import traceback
 import tuned.exceptions
 import tuned.logs
 import tuned.plugins.exceptions
 import tuned.consts as consts
+from tuned.utils.global_config import GlobalConfig
+from tuned.utils.commands import commands
 
 log = tuned.logs.get()
 
@@ -14,13 +18,17 @@ class Manager(object):
 	Manager creates plugin instances and keeps a track of them.
 	"""
 
-	def __init__(self, plugins_repository, monitors_repository, def_instance_priority):
+	def __init__(self, plugins_repository, monitors_repository,
+			def_instance_priority, hardware_inventory, config = None):
 		super(Manager, self).__init__()
 		self._plugins_repository = plugins_repository
 		self._monitors_repository = monitors_repository
 		self._def_instance_priority = def_instance_priority
+		self._hardware_inventory = hardware_inventory
 		self._instances = []
 		self._plugins = []
+		self._config = config or GlobalConfig()
+		self._cmd = commands()
 
 	@property
 	def plugins(self):
@@ -30,12 +38,41 @@ class Manager(object):
 	def instances(self):
 		return self._instances
 
+	@property
+	def plugins_repository(self):
+		return self._plugins_repository
+
+	def _unit_matches_cpuinfo(self, unit):
+		if unit.cpuinfo_regex is None:
+			return True
+		cpuinfo_string = self._config.get(consts.CFG_CPUINFO_STRING)
+		if cpuinfo_string is None:
+			cpuinfo_string = self._cmd.read_file("/proc/cpuinfo")
+		return re.search(unit.cpuinfo_regex, cpuinfo_string,
+				re.MULTILINE) is not None
+
+	def _unit_matches_uname(self, unit):
+		if unit.uname_regex is None:
+			return True
+		uname_string = self._config.get(consts.CFG_UNAME_STRING)
+		if uname_string is None:
+			uname_string = " ".join(os.uname())
+		return re.search(unit.uname_regex, uname_string,
+				re.MULTILINE) is not None
+
 	def create(self, instances_config):
 		instance_info_list = []
 		for instance_name, instance_info in list(instances_config.items()):
 			if not instance_info.enabled:
 				log.debug("skipping disabled instance '%s'" % instance_name)
 				continue
+			if not self._unit_matches_cpuinfo(instance_info):
+				log.debug("skipping instance '%s', cpuinfo does not match" % instance_name)
+				continue
+			if not self._unit_matches_uname(instance_info):
+				log.debug("skipping instance '%s', uname does not match" % instance_name)
+				continue
+
 			instance_info.options.setdefault("priority", self._def_instance_priority)
 			instance_info.options["priority"] = int(instance_info.options["priority"])
 			instance_info_list.append(instance_info)
@@ -59,6 +96,7 @@ class Manager(object):
 				log.exception(e)
 				continue
 
+		instances = []
 		for instance_info in instance_info_list:
 			plugin = plugins_by_name[instance_info.type]
 			if plugin is None:
@@ -66,9 +104,15 @@ class Manager(object):
 			log.debug("creating '%s' (%s)" % (instance_info.name, instance_info.type))
 			new_instance = plugin.create_instance(instance_info.name, instance_info.devices, instance_info.devices_udev_regex, \
 				instance_info.script_pre, instance_info.script_post, instance_info.options)
-			plugin.assign_free_devices(new_instance)
-			plugin.initialize_instance(new_instance)
-			self._instances.append(new_instance)
+			instances.append(new_instance)
+		for instance in instances:
+			instance.plugin.init_devices()
+			instance.plugin.assign_free_devices(instance)
+			instance.plugin.initialize_instance(instance)
+		# At this point we should be able to start the HW events
+		# monitoring/processing thread, without risking race conditions
+		self._hardware_inventory.start_processing_events()
+		self._instances.extend(instances)
 
 	def _try_call(self, caller, exc_ret, f, *args, **kwargs):
 		try:
@@ -77,7 +121,7 @@ class Manager(object):
 			trace = traceback.format_exc()
 			log.error("BUG: Unhandled exception in %s: %s"
 					% (caller, str(e)))
-			log.debug(trace)
+			log.error(trace)
 			return exc_ret
 
 	def destroy_all(self):
@@ -126,6 +170,7 @@ class Manager(object):
 	# it means to remove all temporal or helper files, unpatch third
 	# party config files, etc.
 	def stop_tuning(self, full_rollback = False):
+		self._hardware_inventory.stop_processing_events()
 		for instance in reversed(self._instances):
 			self._try_call("stop_tuning", None,
 					instance.unapply_tuning, full_rollback)

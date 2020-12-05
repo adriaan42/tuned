@@ -7,11 +7,12 @@ import tuned.consts as consts
 import os
 import struct
 import errno
+import platform
+import procfs
 
 log = tuned.logs.get()
 
-# TODO: force_latency -> command
-#       intel_pstate
+cpuidle_states_path = "/sys/devices/system/cpu/cpu0/cpuidle"
 
 class CPULatencyPlugin(base.Plugin):
 	"""
@@ -22,7 +23,11 @@ class CPULatencyPlugin(base.Plugin):
 		super(CPULatencyPlugin, self).__init__(*args, **kwargs)
 
 		self._has_pm_qos = True
-		self._has_energy_perf_bias = True
+		self._arch = "x86_64"
+		self._is_x86 = False
+		self._is_intel = False
+		self._is_amd = False
+		self._has_energy_perf_bias = False
 		self._has_intel_pstate = False
 
 		self._min_perf_pct_save = None
@@ -58,11 +63,41 @@ class CPULatencyPlugin(base.Plugin):
 			"no_turbo"             : None,
 		}
 
+	def _check_arch(self):
+		intel_archs = [ "x86_64", "i686", "i585", "i486", "i386" ]
+		self._arch = platform.machine()
+
+		if self._arch in intel_archs:
+                        # Possible other x86 vendors (from arch/x86/kernel/cpu/*):
+                        # "CentaurHauls", "CyrixInstead", "Geode by NSC", "HygonGenuine", "GenuineTMx86",
+                        # "TransmetaCPU", "UMC UMC UMC"
+			cpu = procfs.cpuinfo()
+			vendor = cpu.tags.get("vendor_id")
+			if vendor == "GenuineIntel":
+			        self._is_intel = True
+			elif vendor == "AuthenticAMD" or vendor == "HygonGenuine":
+			        self._is_amd = True
+			else:
+				# We always assign Intel, unless we know better
+				self._is_intel = True
+			log.info("We are running on an x86 %s platform" % vendor)
+		else:
+			log.info("We are running on %s (non x86)" % self._arch)
+
+		if self._is_intel is True:
+			# Check for x86_energy_perf_policy, ignore if not available / supported
+			self._check_energy_perf_bias()
+			# Check for intel_pstate
+			self._check_intel_pstate()
+
 	def _check_energy_perf_bias(self):
 		self._has_energy_perf_bias = False
 		retcode_unsupported = 1
-		retcode = self._cmd.execute(["x86_energy_perf_policy", "-r"], no_errors = [errno.ENOENT, retcode_unsupported])[0]
-		if retcode == 0:
+		retcode, out = self._cmd.execute(["x86_energy_perf_policy", "-r"], no_errors = [errno.ENOENT, retcode_unsupported])
+		# With recent versions of the tool, a zero exit code is
+		# returned even if EPB is not supported. The output is empty
+		# in that case, however.
+		if retcode == 0 and out != "":
 			self._has_energy_perf_bias = True
 		elif retcode < 0:
 			log.warning("unable to run x86_energy_perf_policy tool, ignoring CPU energy performance bias, is the tool installed?")
@@ -110,15 +145,15 @@ class CPULatencyPlugin(base.Plugin):
 			else:
 				instance._load_monitor = None
 
-			# Check for x86_energy_perf_policy, ignore if not available / supported
-			self._check_energy_perf_bias()
-			# Check for intel_pstate
-			self._check_intel_pstate()
+			self._check_arch()
 		else:
 			instance._first_instance = False
 			log.info("Latency settings from non-first CPU plugin instance '%s' will be ignored." % instance.name)
 
-		instance._first_device = list(instance.devices)[0]
+		try:
+			instance._first_device = list(instance.assigned_devices)[0]
+		except IndexError:
+			instance._first_device = None
 
 	def _instance_cleanup(self, instance):
 		if instance._first_instance:
@@ -147,13 +182,23 @@ class CPULatencyPlugin(base.Plugin):
 		if not instance._first_instance:
 			return
 
-		force_latency_value = instance.options["force_latency"]
+		force_latency_value = self._variables.expand(
+			instance.options["force_latency"])
 		if force_latency_value is not None:
 			self._set_latency(force_latency_value)
 		if self._has_intel_pstate:
-			self._min_perf_pct_save = self._getset_intel_pstate_attr("min_perf_pct", instance.options["min_perf_pct"])
-			self._max_perf_pct_save = self._getset_intel_pstate_attr("max_perf_pct", instance.options["max_perf_pct"])
-			self._no_turbo_save = self._getset_intel_pstate_attr("no_turbo", instance.options["no_turbo"])
+			new_value = self._variables.expand(
+				instance.options["min_perf_pct"])
+			self._min_perf_pct_save = self._getset_intel_pstate_attr(
+				"min_perf_pct", new_value)
+			new_value = self._variables.expand(
+				instance.options["max_perf_pct"])
+			self._max_perf_pct_save = self._getset_intel_pstate_attr(
+				"max_perf_pct", new_value)
+			new_value = self._variables.expand(
+				instance.options["no_turbo"])
+			self._no_turbo_save = self._getset_intel_pstate_attr(
+				"no_turbo", new_value)
 
 	def _instance_unapply_static(self, instance, full_rollback = False):
 		super(CPULatencyPlugin, self)._instance_unapply_static(instance, full_rollback)
@@ -180,29 +225,110 @@ class CPULatencyPlugin(base.Plugin):
 	def _instance_unapply_dynamic(self, instance, device):
 		pass
 
+	def _str2int(self, s):
+		try:
+			return int(s)
+		except (ValueError, TypeError):
+			return None
+
+	def _read_cstates_latency(self):
+		self.cstates_latency = {}
+		for d in os.listdir(cpuidle_states_path):
+			cstate_path = cpuidle_states_path + "/%s/" % d
+			name = self._cmd.read_file(cstate_path + "name", err_ret = None, no_error = True)
+			latency = self._cmd.read_file(cstate_path + "latency", err_ret = None, no_error = True)
+			if name is not None and latency is not None:
+				latency = self._str2int(latency)
+				if latency is not None:
+					self.cstates_latency[name.strip()] = latency
+
+	def _get_latency_by_cstate_name(self, name):
+		log.debug("getting latency for cstate with name '%s'" % name)
+		if self.cstates_latency is None:
+			log.debug("reading cstates latency table")
+			self._read_cstates_latency()
+		latency = self.cstates_latency.get(name, None)
+		log.debug("cstate name mapped to latency: %s" % str(latency))
+		return latency
+
+	def _get_latency_by_cstate_id(self, lid):
+		log.debug("getting latency for cstate with ID '%s'" % str(lid))
+		lid = self._str2int(lid)
+		if lid is None:
+			log.debug("cstate ID is invalid")
+			return None
+		latency_path = cpuidle_states_path + "/%s/latency" % ("state%d" % lid)
+		latency = self._str2int(self._cmd.read_file(latency_path, err_ret = None, no_error = True))
+		log.debug("cstate ID mapped to latency: %s" % str(latency))
+		return latency
+
+	# returns (latency, skip), skip means we want to skip latency settings
+	def _parse_latency(self, latency):
+		self.cstates_latency = None
+		latencies = str(latency).split("|")
+		log.debug("parsing latency")
+		for latency in latencies:
+			try:
+				latency = int(latency)
+				log.debug("parsed directly specified latency value: %d" % latency)
+			except ValueError:
+				if latency[0:10] == "cstate.id:":
+					latency = self._get_latency_by_cstate_id(latency[10:])
+				elif latency[0:12] == "cstate.name:":
+					latency = self._get_latency_by_cstate_name(latency[12:])
+				elif latency in ["none", "None"]:
+					log.debug("latency 'none' specified")
+					return None, True
+				else:
+					latency = None
+					log.debug("invalid latency specified: '%s'" % str(latency))
+			if latency is not None:
+				break
+		return latency, False
+
 	def _set_latency(self, latency):
-		latency = int(latency)
-		if self._has_pm_qos and self._latency != latency:
-			log.info("setting new cpu latency %d" % latency)
-			latency_bin = struct.pack("i", latency)
-			os.write(self._cpu_latency_fd, latency_bin)
-			self._latency = latency
+		latency, skip = self._parse_latency(latency)
+		if not skip and self._has_pm_qos:
+			if latency is None:
+				log.error("unable to evaluate latency value (probably wrong settings in the 'cpu' section of current profile), disabling PM QoS")
+				self._has_pm_qos = False
+			elif self._latency != latency:
+				log.info("setting new cpu latency %d" % latency)
+				latency_bin = struct.pack("i", latency)
+				os.write(self._cpu_latency_fd, latency_bin)
+				self._latency = latency
 
 	def _get_available_governors(self, device):
 		return self._cmd.read_file("/sys/devices/system/cpu/%s/cpufreq/scaling_available_governors" % device).strip().split()
 
 	@command_set("governor", per_device=True)
-	def _set_governor(self, governor, device, sim):
+	def _set_governor(self, governors, device, sim):
 		if not self._check_cpu_can_change_governor(device):
 			return None
-		if governor not in self._get_available_governors(device):
-			if not sim:
-				log.info("ignoring governor '%s' on cpu '%s', it is not supported" % (governor, device))
-			return None
-		if not sim:
-			log.info("setting governor '%s' on cpu '%s'" % (governor, device))
-			self._cmd.write_to_file("/sys/devices/system/cpu/%s/cpufreq/scaling_governor" % device, str(governor))
-		return str(governor)
+		governors = str(governors)
+		governors = governors.split("|")
+		governors = [governor.strip() for governor in governors]
+		for governor in governors:
+			if len(governor) == 0:
+				log.error("The 'governor' option contains an empty value.")
+				return None
+		available_governors = self._get_available_governors(device)
+		for governor in governors:
+			if governor in available_governors:
+				if not sim:
+					log.info("setting governor '%s' on cpu '%s'"
+							% (governor, device))
+					self._cmd.write_to_file("/sys/devices/system/cpu/%s/cpufreq/scaling_governor"
+							% device, governor)
+				break
+			elif not sim:
+				log.debug("Ignoring governor '%s' on cpu '%s', it is not supported"
+						% (governor, device))
+		else:
+			log.warn("None of the scaling governors is supported: %s"
+					% ", ".join(governors))
+			governor = None
+		return governor
 
 	@command_get("governor")
 	def _get_governor(self, device, ignore_missing=False):

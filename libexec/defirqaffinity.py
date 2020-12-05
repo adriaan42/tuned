@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 # Helper script for realtime profiles provided by RT
 
@@ -82,6 +82,7 @@ def verify(shouldbemask):
 	sys.exit(0)
 
 
+sys.stderr.write("defirqaffinity.py is deprecated. Use isolated_cores or other built-in functionality instead.\n")
 
 # adjust default_smp_affinity
 cpulist = parse_def_affinity(irqpath + "default_smp_affinity")
@@ -107,7 +108,7 @@ if sys.argv[1] == "verify":
 
 string = get_cpumask(mask)
 
-fo = open(irqpath + "default_smp_affinity", "wb")
+fo = open(irqpath + "default_smp_affinity", "w")
 fo.write(string)
 fo.close()
 
@@ -140,7 +141,7 @@ for i in interruptdirs:
 			mask = mask & ~(1 << int(j));
 	string = get_cpumask(mask)
 	try:
-		fo = open(fname, "wb")
+		fo = open(fname, "w")
 		fo.write(string)
 		fo.close()
 	except IOError as e:

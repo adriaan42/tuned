@@ -6,6 +6,7 @@ from tuned.profiles import Locator as profiles_locator
 from .exceptions import TunedAdminDBusException
 from tuned.exceptions import TunedException
 import tuned.consts as consts
+from tuned.utils.profile_recommender import ProfileRecommender
 import os
 import sys
 import errno
@@ -14,12 +15,12 @@ import threading
 import logging
 
 class Admin(object):
-	def __init__(self, dbus = True, debug = False, async = False,
+	def __init__(self, dbus = True, debug = False, asynco = False,
 			timeout = consts.ADMIN_TIMEOUT,
 			log_level = logging.ERROR):
 		self._dbus = dbus
 		self._debug = debug
-		self._async = async
+		self._async = asynco
 		self._timeout = timeout
 		self._cmd = commands(debug)
 		self._profiles_locator = profiles_locator(consts.LOAD_DIRECTORIES)
@@ -30,6 +31,7 @@ class Admin(object):
 		self._controller = None
 		self._log_token = None
 		self._log_level = log_level
+		self._profile_recommender = ProfileRecommender()
 		if self._dbus:
 			self._controller = tuned.admin.DBusController(consts.DBUS_BUS, consts.DBUS_INTERFACE, consts.DBUS_OBJECT, debug)
 			try:
@@ -73,7 +75,7 @@ class Admin(object):
 			action = getattr(self, "_action_" + action_name)
 		except AttributeError as e:
 			if not self._dbus:
-				self._error(e + ", action '%s' is not implemented" % action_name)
+				self._error(str(e) + ", action '%s' is not implemented" % action_name)
 				return False
 		if self._dbus:
 			try:
@@ -97,7 +99,7 @@ class Admin(object):
 			else:
 				print("- %s" % profile[0])
 
-	def _action_dbus_list(self):
+	def _action_dbus_list_profiles(self):
 		try:
 			profile_names = self._controller.profiles2()
 		except TunedAdminDBusException as e:
@@ -107,7 +109,7 @@ class Admin(object):
 		self._action_dbus_active()
 		return self._controller.exit(True)
 
-	def _action_list(self):
+	def _action_list_profiles(self):
 		self._print_profiles(self._profiles_locator.get_known_names_summary())
 		self._action_active()
 		return True
@@ -129,6 +131,16 @@ class Admin(object):
 			manual = profile is not None
 		return consts.ACTIVE_PROFILE_MANUAL if manual else consts.ACTIVE_PROFILE_AUTO
 
+	def _dbus_get_post_loaded_profile(self):
+		profile_name = self._controller.post_loaded_profile()
+		if profile_name == "":
+			profile_name = None
+		return profile_name
+
+	def _get_post_loaded_profile(self):
+		profile_name = self._cmd.get_post_loaded_profile()
+		return profile_name
+
 	def _print_profile_info(self, profile, profile_info):
 		if profile_info[0] == True:
 			print("Profile name:")
@@ -147,7 +159,12 @@ class Admin(object):
 	def _action_dbus_profile_info(self, profile = ""):
 		if profile == "":
 			profile = self._dbus_get_active_profile()
-		return self._controller.exit(self._print_profile_info(profile, self._controller.profile_info(profile)))
+		if profile:
+			res = self._print_profile_info(profile, self._controller.profile_info(profile))
+		else:
+			print("No current active profile.")
+			res = False
+		return self._controller.exit(res)
 
 	def _action_profile_info(self, profile = ""):
 		if profile == "":
@@ -169,20 +186,42 @@ class Admin(object):
 			print("Current active profile: %s" % profile_name)
 		return True
 
+	def _print_post_loaded_profile(self, profile_name):
+		if profile_name:
+			print("Current post-loaded profile: %s" % profile_name)
+
 	def _action_dbus_active(self):
-		return self._controller.exit(self._print_profile_name(self._dbus_get_active_profile()))
+		active_profile = self._dbus_get_active_profile()
+		res = self._print_profile_name(active_profile)
+		if res:
+			post_loaded_profile = self._dbus_get_post_loaded_profile()
+			self._print_post_loaded_profile(post_loaded_profile)
+		return self._controller.exit(res)
 
 	def _action_active(self):
 		try:
 			profile_name = self._get_active_profile()
+			post_loaded_profile = self._get_post_loaded_profile()
+			# The result of the DBus call active_profile includes
+			# the post-loaded profile, so add it here as well
+			if post_loaded_profile:
+				if profile_name:
+					profile_name += " "
+				else:
+					profile_name = ""
+				profile_name += post_loaded_profile
 		except TunedException as e:
 			self._error(str(e))
 			return False
 		if profile_name is not None and not self._tuned_is_running():
 			print("It seems that tuned daemon is not running, preset profile is not activated.")
 			print("Preset profile: %s" % profile_name)
+			if post_loaded_profile:
+				print("Preset post-loaded profile: %s" % post_loaded_profile)
 			return True
-		return self._print_profile_name(profile_name)
+		res = self._print_profile_name(profile_name)
+		self._print_post_loaded_profile(post_loaded_profile)
+		return res
 
 	def _print_profile_mode(self, mode):
 		print("Profile selection mode: " + mode)
@@ -281,7 +320,7 @@ class Admin(object):
 
 	def _action_profile(self, profiles):
 		if len(profiles) == 0:
-			return self._action_list()
+			return self._action_list_profiles()
 		profile_name = " ".join(profiles)
 		if profile_name == "":
 			return False
@@ -304,7 +343,7 @@ class Admin(object):
 		return self._profile_print_status(ret, msg)
 
 	def _action_auto_profile(self):
-		profile_name = self._cmd.recommend_profile()
+		profile_name = self._profile_recommender.recommend()
 		return self._set_profile(profile_name, False)
 
 	def _action_dbus_recommend_profile(self):
@@ -312,7 +351,7 @@ class Admin(object):
 		return self._controller.exit(True)
 
 	def _action_recommend_profile(self):
-		print(self._cmd.recommend_profile())
+		print(self._profile_recommender.recommend())
 		return True
 
 	def _action_dbus_verify_profile(self, ignore_missing):
@@ -347,5 +386,56 @@ class Admin(object):
 		return self._controller.exit(ret)
 
 	def _action_off(self):
+		print("Not supported in no_daemon mode.")
+		return False
+
+	def _action_dbus_list(self, list_choice="profiles", verbose=False):
+		"""Print accessible profiles or plugins got from tuned dbus api
+
+		Keyword arguments:
+		list_choice -- argument from command line deciding what will be listed
+		verbose -- if True then list plugin's config options and their hints
+			if possible. Functional only with plugin listing, with profiles
+			this argument is omitted
+		"""
+		if list_choice == "profiles":
+			return self._action_dbus_list_profiles()
+		elif list_choice == "plugins":
+			return self._action_dbus_list_plugins(verbose=verbose)
+
+	def _action_list(self, list_choice="profiles", verbose=False):
+		"""Print accessible profiles or plugins with no daemon mode
+
+		Keyword arguments:
+		list_choice -- argument from command line deciding what will be listed
+		verbose -- Plugins cannot be listed in this mode, so verbose argument
+			is here only because argparse module always supplies verbose
+			option and if verbose was not here it would result in error
+		"""
+		if list_choice == "profiles":
+			return self._action_list_profiles()
+		elif list_choice == "plugins":
+			return self._action_list_plugins(verbose=verbose)
+
+	def _action_dbus_list_plugins(self, verbose=False):
+		"""Print accessible plugins
+
+		Keyword arguments:
+		verbose -- if is set to True then parameters and hints are printed
+		"""
+		plugins = self._controller.get_plugins()
+		for plugin in plugins.keys():
+			print(plugin)
+			if not verbose or len(plugins[plugin]) == 0:
+				continue
+			hints = self._controller.get_plugin_hints(plugin)
+			for parameter in plugins[plugin]:
+				print("\t%s" %(parameter))
+				hint = hints.get(parameter, None)
+				if hint:
+					print("\t\t%s" %(hint))
+		return self._controller.exit(True)
+
+	def _action_list_plugins(self, verbose=False):
 		print("Not supported in no_daemon mode.")
 		return False

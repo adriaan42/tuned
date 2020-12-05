@@ -12,7 +12,7 @@ class Inventory(object):
 	about related hardware events.
 	"""
 
-	def __init__(self, udev_context=None, udev_monitor_cls=None, monitor_observer_factory=None, buffer_size=None):
+	def __init__(self, udev_context=None, udev_monitor_cls=None, monitor_observer_factory=None, buffer_size=None, set_receive_buffer_size=True):
 		if udev_context is not None:
 			self._udev_context = udev_context
 		else:
@@ -23,7 +23,13 @@ class Inventory(object):
 		self._udev_monitor = udev_monitor_cls.from_netlink(self._udev_context)
 		if buffer_size is None:
 			buffer_size = consts.CFG_DEF_UDEV_BUFFER_SIZE
-		self._udev_monitor.set_receive_buffer_size(buffer_size)
+
+		if (set_receive_buffer_size):
+			try:
+				self._udev_monitor.set_receive_buffer_size(buffer_size)
+			except EnvironmentError:
+				log.warn("cannot set udev monitor receive buffer size, we are probably running inside " +
+					 "container or with limited capabilites, Tuned functionality may be limited")
 
 		if monitor_observer_factory is None:
 			monitor_observer_factory = _MonitorObserverFactory()
@@ -43,11 +49,6 @@ class Inventory(object):
 	def get_devices(self, subsystem):
 		"""Get list of devices on a given subsystem."""
 		return self._udev_context.list_devices(subsystem=subsystem)
-
-	def _remove_unused_filters(self):
-		self._udev_monitor.remove_filter()
-		for subsystem in self._subscriptions:
-			self._udev_monitor.filter_by(subsystem)
 
 	def _handle_udev_event(self, event, device):
 		if not device.subsystem in self._subscriptions:
@@ -69,11 +70,20 @@ class Inventory(object):
 		else:
 			self._subscriptions[subsystem] = [callback_data, ]
 			self._udev_monitor.filter_by(subsystem)
+			# After start(), HW events begin to get queued up
+			self._udev_monitor.start()
 
+	def start_processing_events(self):
 		if self._monitor_observer is None:
 			log.debug("starting monitor observer")
 			self._monitor_observer = self._monitor_observer_factory.create(self._udev_monitor, self._handle_udev_event)
 			self._monitor_observer.start()
+
+	def stop_processing_events(self):
+		if self._monitor_observer is not None:
+			log.debug("stopping monitor observer")
+			self._monitor_observer.stop()
+			self._monitor_observer = None
 
 	def _unsubscribe_subsystem(self, plugin, subsystem):
 		for callback_data in self._subscriptions[subsystem]:
@@ -93,11 +103,6 @@ class Inventory(object):
 
 		for _subsystem in empty_subsystems:
 			del self._subscriptions[_subsystem]
-
-		if len(self._subscriptions) == 0 and self._monitor_observer is not None:
-			log.debug("stopping monitor observer")
-			self._monitor_observer.stop()
-			self._monitor_observer = None
 
 class _MonitorObserverFactory(object):
 	def create(self, *args, **kwargs):

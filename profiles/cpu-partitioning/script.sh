@@ -39,8 +39,6 @@ start() {
     mkdir -p "${TUNED_tmpdir}/usr/lib/dracut/hooks/pre-udev"
     cp /etc/systemd/system.conf "${TUNED_tmpdir}/etc/systemd/"
     cp 00-tuned-pre-udev.sh "${TUNED_tmpdir}/usr/lib/dracut/hooks/pre-udev/"
-    sed -i '/^IRQBALANCE_BANNED_CPUS=/d' /etc/sysconfig/irqbalance
-    echo "IRQBALANCE_BANNED_CPUS=$TUNED_isolated_cpumask" >>/etc/sysconfig/irqbalance
     setup_kvm_mod_low_latency
     disable_ksm
 
@@ -52,10 +50,9 @@ start() {
 stop() {
     if [ "$1" = "full_rollback" ]
     then
-        sed -i '/^IRQBALANCE_BANNED_CPUS=/d' /etc/sysconfig/irqbalance
         teardown_kvm_mod_low_latency
+        enable_ksm
     fi
-    enable_ksm
     enable_balance_domains
     return "$?"
 }

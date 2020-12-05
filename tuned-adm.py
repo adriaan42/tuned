@@ -1,4 +1,4 @@
-#!/usr/bin/python -Es
+#!/usr/bin/python3 -Es
 #
 # tuned: daemon for monitoring and adaptive tuning of system devices
 #
@@ -63,8 +63,11 @@ if __name__ == "__main__":
 
 	subparsers = parser.add_subparsers()
 
-	parser_list = subparsers.add_parser("list", help="list available profiles")
+	parser_list = subparsers.add_parser("list", help="list available profiles or plugins (by default profiles)")
 	parser_list.set_defaults(action="list")
+
+	parser_list.add_argument("list_choice", nargs="?",default="profiles", choices=["plugins","profiles"], help="choose what to list", metavar="{plugins|profiles}")
+	parser_list.add_argument("--verbose", "-v", action="store_true", help="show plugin's configuration parameters and their meaning")
 
 	parser_active = subparsers.add_parser("active", help="show active profile")
 	parser_active.set_defaults(action="active")
@@ -98,16 +101,20 @@ if __name__ == "__main__":
 
 	options = vars(args)
 	debug = options.pop("debug")
-	async = options.pop("async")
+	asynco = options.pop("async")
 	timeout = options.pop("timeout")
-	action_name = options.pop("action")
+	try:
+		action_name = options.pop("action")
+	except KeyError:
+		parser.print_usage(file = sys.stderr)
+		sys.exit(1)
 	log_level = options.pop("loglevel")
 	result = False
 
 	dbus = config.get_bool(consts.CFG_DAEMON, consts.CFG_DEF_DAEMON)
 
 	try:
-		admin = tuned.admin.Admin(dbus, debug, async, timeout, log_level)
+		admin = tuned.admin.Admin(dbus, debug, asynco, timeout, log_level)
 
 		result = admin.action(action_name, **options)
 	except:

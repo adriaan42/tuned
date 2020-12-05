@@ -7,6 +7,7 @@ from tuned.profiles.exceptions import InvalidProfileException
 import tuned.consts as consts
 from tuned.utils.commands import commands
 from tuned import exports
+from tuned.utils.profile_recommender import ProfileRecommender
 import re
 
 log = tuned.logs.get()
@@ -58,44 +59,99 @@ class Daemon(object):
 		self._not_used.set()
 		self._profile_applied = threading.Event()
 
+	def reload_profile_config(self):
+		"""Read configuration files again and load profile according to them"""
+		self._init_profile(None)
+
 	def _init_profile(self, profile_names):
 		manual = True
+		post_loaded_profile = self._cmd.get_post_loaded_profile()
 		if profile_names is None:
 			(profile_names, manual) = self._get_startup_profile()
 			if profile_names is None:
-				log.info("No profile is preset, running in manual mode. No profile will be enabled.")
+				msg = "No profile is preset, running in manual mode. "
+				if post_loaded_profile:
+					msg += "Only post-loaded profile will be enabled"
+				else:
+					msg += "No profile will be enabled."
+				log.info(msg)
 		# Passed through '-p' cmdline option
 		elif profile_names == "":
-			log.info("No profile will be enabled.")
+			if post_loaded_profile:
+				log.info("Only post-loaded profile will be enabled")
+			else:
+				log.info("No profile will be enabled.")
 
 		self._profile = None
 		self._manual = None
-		self.set_profile(profile_names, manual)
+		self._active_profiles = []
+		self._post_loaded_profile = None
+		self.set_all_profiles(profile_names, manual, post_loaded_profile)
 
-	def set_profile(self, profile_names, manual, save_instantly=False):
-		if self.is_running():
-			raise TunedException(self._notify_profile_changed(profile_names, False, "Cannot set profile while the daemon is running."))
+	def _load_profiles(self):
+		profile_list = self._active_profiles
+		if self._post_loaded_profile:
+			log.info("Using post-loaded profile '%s'"
+				 % self._post_loaded_profile)
+			profile_list = profile_list + [self._post_loaded_profile]
+		for profile in profile_list:
+			if profile not in self.profile_loader.profile_locator.get_known_names():
+				errstr = "Requested profile '%s' doesn't exist." % profile
+				profile_names = " ".join(self._active_profiles)
+				self._notify_profile_changed(profile_names, False, errstr)
+				raise TunedException(errstr)
+		try:
+			if profile_list:
+				self._profile = self._profile_loader.load(profile_list)
+			else:
+				self._profile = None
+		except InvalidProfileException as e:
+			errstr = "Cannot load profile(s) '%s': %s" % (" ".join(profile_list), e)
+			profile_names = " ".join(self._active_profiles)
+			self._notify_profile_changed(profile_names, False, errstr)
+			raise TunedException(errstr)
 
-		if profile_names == "" or profile_names is None:
-			self._profile = None
-			self._manual = manual
+	def _set_profile(self, profile_names, manual):
+		self._manual = manual
+		if profile_names:
+			self._active_profiles = profile_names.split()
 		else:
-			profile_list = profile_names.split()
-			for profile in profile_list:
-				if profile not in self.profile_loader.profile_locator.get_known_names():
-					raise TunedException(self._notify_profile_changed(\
-							profile_names, False,\
-							"Requested profile '%s' doesn't exist." % profile))
-			try:
-				self._profile = self._profile_loader.load(profile_names)
-				self._manual = manual
-			except InvalidProfileException as e:
-				raise TunedException(self._notify_profile_changed(profile_names, False, "Cannot load profile(s) '%s': %s" % (profile_names, e)))
+			self._active_profiles = []
+
+	def set_profile(self, profile_names, manual):
+		if self.is_running():
+			errstr = "Cannot set profile while the daemon is running."
+			self._notify_profile_changed(profile_names, False,
+						     errstr)
+			raise TunedException(errstr)
+
+		self._set_profile(profile_names, manual)
+		self._load_profiles()
+
+	def _set_post_loaded_profile(self, profile_name):
+		if not profile_name:
+			self._post_loaded_profile = None
+		elif len(profile_name.split()) > 1:
+			errstr = "Whitespace is not allowed in profile names; only a single post-loaded profile is allowed."
+			raise TunedException(errstr)
+		else:
+			self._post_loaded_profile = profile_name
+
+	def set_all_profiles(self, active_profiles, manual, post_loaded_profile,
+			     save_instantly=False):
+		if self.is_running():
+			errstr = "Cannot set profile while the daemon is running."
+			self._notify_profile_changed(active_profiles, False,
+						     errstr)
+			raise TunedException(errstr)
+
+		self._set_profile(active_profiles, manual)
+		self._set_post_loaded_profile(post_loaded_profile)
+		self._load_profiles()
 
 		if save_instantly:
-			if profile_names is None:
-				profile_names = ""
-			self._save_active_profile(profile_names, manual)
+			self._save_active_profile(active_profiles, manual)
+			self._save_post_loaded_profile(post_loaded_profile)
 
 	@property
 	def profile(self):
@@ -104,6 +160,12 @@ class Daemon(object):
 	@property
 	def manual(self):
 		return self._manual
+
+	@property
+	def post_loaded_profile(self):
+		# Return the profile name only if the profile is active. If
+		# the profile is not active, then the value is meaningless.
+		return self._post_loaded_profile if self._profile else None
 
 	@property
 	def profile_loader(self):
@@ -130,13 +192,16 @@ class Daemon(object):
 			raise TunedException("Cannot start the daemon without setting a profile.")
 
 		self._unit_manager.create(self._profile.units)
-		self._save_active_profile(self._profile.name, self._manual)
+		self._save_active_profile(" ".join(self._active_profiles),
+					  self._manual)
+		self._save_post_loaded_profile(self._post_loaded_profile)
 		self._unit_manager.start_tuning()
 		self._profile_applied.set()
 		log.info("static tuning from profile '%s' applied" % self._profile.name)
 		if self._daemon:
 			exports.start()
-		self._notify_profile_changed(self._profile.name, True, "OK")
+		profile_names = " ".join(self._active_profiles)
+		self._notify_profile_changed(profile_names, True, "OK")
 
 		if self._daemon:
 			# In python 2 interpreter with applied patch for rhbz#917709 we need to periodically
@@ -173,8 +238,11 @@ class Daemon(object):
 			# do full cleanup
 			full_rollback = False
 			if self._full_rollback_required():
-				log.info("terminating Tuned, rolling back all changes")
-				full_rollback = True
+				if self._daemon:
+					log.info("terminating Tuned, rolling back all changes")
+					full_rollback = True
+				else:
+					log.info("terminating Tuned in one-shot mode")
 			else:
 				log.info("terminating Tuned due to system shutdown / reboot")
 		if self._daemon:
@@ -187,9 +255,15 @@ class Daemon(object):
 		except TunedException as e:
 			log.error(str(e))
 
+	def _save_post_loaded_profile(self, profile_name):
+		try:
+			self._cmd.save_post_loaded_profile(profile_name)
+		except TunedException as e:
+			log.error(str(e))
+
 	def _get_recommended_profile(self):
 		log.info("Running in automatic mode, checking what profile is recommended for your configuration.")
-		profile = self._cmd.recommend_profile(hardcoded = not self._recommend_command)
+		profile = ProfileRecommender().recommend(hardcoded = not self._recommend_command)
 		log.info("Using '%s' profile" % profile)
 		return profile
 
@@ -200,6 +274,37 @@ class Daemon(object):
 		if not manual:
 			profile = self._get_recommended_profile()
 		return profile, manual
+
+	def get_all_plugins(self):
+		"""Return all accessible plugin classes"""
+		return self._unit_manager.plugins_repository.load_all_plugins()
+
+	def get_plugin_documentation(self, plugin_name):
+		"""Return plugin class docstring"""
+		try:
+			plugin_class = self._unit_manager.plugins_repository.load_plugin(
+				plugin_name
+			)
+		except ImportError:
+			return ""
+		return plugin_class.__doc__
+
+	def get_plugin_hints(self, plugin_name):
+		"""Return plugin's parameters and their hints
+
+		Parameters:
+		plugin_name -- plugins name
+
+		Return:
+		dictionary -- {parameter_name: hint}
+		"""
+		try:
+			plugin_class = self._unit_manager.plugins_repository.load_plugin(
+				plugin_name
+			)
+		except ImportError:
+			return {}
+		return plugin_class.get_config_options_hints()
 
 	def is_enabled(self):
 		return self._profile is not None

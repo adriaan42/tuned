@@ -3,6 +3,7 @@ import logging
 GLOBAL_CONFIG_FILE = "/etc/tuned/tuned-main.conf"
 ACTIVE_PROFILE_FILE = "/etc/tuned/active_profile"
 PROFILE_MODE_FILE = "/etc/tuned/profile_mode"
+POST_LOADED_PROFILE_FILE = "/etc/tuned/post_loaded_profile"
 PROFILE_FILE = "tuned.conf"
 RECOMMEND_CONF_FILE = "/etc/tuned/recommend.conf"
 DAEMONIZE_PARENT_TIMEOUT = 5
@@ -37,6 +38,16 @@ BOOT_CMDLINE_TUNED_VAR = "TUNED_BOOT_CMDLINE"
 BOOT_CMDLINE_INITRD_ADD_VAR = "TUNED_BOOT_INITRD_ADD"
 BOOT_CMDLINE_FILE = "/etc/tuned/bootcmdline"
 PETITBOOT_DETECT_DIR = "/sys/firmware/opal"
+MACHINE_ID_FILE = "/etc/machine-id"
+KERNEL_UPDATE_HOOK_FILE = "/usr/lib/kernel/install.d/92-tuned.install"
+BLS_ENTRIES_PATH = "/boot/loader/entries"
+
+# scheduler plugin configuration
+# how many times retry to move tasks to parent cgroup on cgroup cleanup
+CGROUP_CLEANUP_TASKS_RETRY = 10
+PROCFS_MOUNT_POINT = "/proc"
+DEF_CGROUP_MOUNT_POINT = "/sys/fs/cgroup/cpuset"
+DEF_CGROUP_MODE = 0o770
 
 # modules plugin configuration
 MODULES_FILE = "/etc/modprobe.d/tuned.conf"
@@ -44,6 +55,9 @@ MODULES_FILE = "/etc/modprobe.d/tuned.conf"
 # systemd plugin configuration
 SYSTEMD_SYSTEM_CONF_FILE = "/etc/systemd/system.conf"
 SYSTEMD_CPUAFFINITY_VAR = "CPUAffinity"
+
+# irqbalance plugin configuration
+IRQBALANCE_SYSCONFIG_FILE = "/etc/sysconfig/irqbalance"
 
 # number of backups
 LOG_FILE_COUNT = 2
@@ -57,7 +71,7 @@ FUNCTION_PREFIX = "function_"
 ENV_PREFIX = "TUNED_"
 
 # tuned-gui
-PREFIX_PROFILE_FACTORY = "Factory"
+PREFIX_PROFILE_FACTORY = "System"
 PREFIX_PROFILE_USER = "User"
 
 CFG_DAEMON = "daemon"
@@ -68,6 +82,8 @@ CFG_RECOMMEND_COMMAND = "recommend_command"
 CFG_REAPPLY_SYSCTL = "reapply_sysctl"
 CFG_DEFAULT_INSTANCE_PRIORITY = "default_instance_priority"
 CFG_UDEV_BUFFER_SIZE = "udev_buffer_size"
+CFG_UNAME_STRING = "uname_string"
+CFG_CPUINFO_STRING = "cpuinfo_string"
 
 # no_daemon mode
 CFG_DEF_DAEMON = True
