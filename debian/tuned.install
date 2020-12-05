@@ -28,6 +28,7 @@ usr/lib/python*/dist-packages/tuned/units/
 usr/lib/python*/dist-packages/tuned/utils/
 usr/lib/python*/dist-packages/tuned/version.py
 usr/lib/tmpfiles.d/tuned.conf
+usr/lib/tuned/accelerator-performance/
 usr/lib/tuned/atomic-guest/
 usr/lib/tuned/atomic-host/
 usr/lib/tuned/balanced/
@@ -38,12 +39,15 @@ usr/lib/tuned/desktop-powersave/
 usr/lib/tuned/desktop/
 usr/lib/tuned/enterprise-storage/
 usr/lib/tuned/functions
+usr/lib/tuned/hpc-compute/
+usr/lib/tuned/intel-sst/
 usr/lib/tuned/laptop-ac-powersave/
 usr/lib/tuned/laptop-battery-powersave/
 usr/lib/tuned/latency-performance/
 usr/lib/tuned/mssql/
 usr/lib/tuned/network-latency/
 usr/lib/tuned/network-throughput/
+usr/lib/tuned/optimize-serial-console/
 usr/lib/tuned/oracle/
 usr/lib/tuned/powersave/
 usr/lib/tuned/realtime-virtual-guest/
@@ -68,5 +72,6 @@ usr/share/man/man5/tuned-main.conf.5
 usr/share/man/man5/tuned.conf.5
 usr/share/man/man7/tuned-profiles*
 usr/share/man/man8/tuned-adm.8
+usr/share/man/man8/tuned-gui.8
 usr/share/man/man8/tuned.8
 usr/share/polkit-1/actions/com.redhat.tuned.policy
