@@ -1,2 +1,3 @@
 usr/share/doc/tuned/COPYING
 usr/share/doc/tuned/AUTHORS
+usr/lib/kernel/install.d/92-tuned.install
