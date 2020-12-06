@@ -3,7 +3,7 @@ Section: admin
 Priority: optional
 Maintainer: Evgeni Golov <evgeni@debian.org>
 Uploaders: gustavo panizzo <gfa@zumbi.com.ar>
-Build-Depends: debhelper (>= 10.3),
+Build-Depends: debhelper-compat (= 13),
                desktop-file-utils,
                dh-python,
                ethtool,
