@@ -1,8 +1,22 @@
-tuned (2.14.0-1) UNRELEASED; urgency=medium
+tuned (2.14.0-1) unstable; urgency=medium
 
   * New upstream release (Closes: #966555)
+  * Drop patches taken from upstream:
+    + no_action
+    + python37
+  * add ncat to depends and python3-demidecode to recommends
+  * enable procfs support
+    + Depend on python3-linux-procfs
+    + Drop disable-process-matching patch
+  * correct debian watch
+  * Standards-Version: 4.5.1
+  * use debhelper 13 compat level
+  * enable tests
+  * use /etc/default not /etc/sysconfig (Closes: #930509)
+  * explicitly use bash, not sh for scripts (Closes: #930489)
 
- -- Evgeni Golov <evgeni@debian.org>  Sat, 05 Dec 2020 15:19:00 +0100
+ -- Evgeni Golov <evgeni@debian.org>  Sun, 13 Dec 2020 13:06:07 +0100
+
 tuned (2.10.0-1) unstable; urgency=medium
 
   * New upstream release (Closes: #908053)
