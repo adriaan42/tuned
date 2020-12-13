@@ -1,0 +1,57 @@
+From a6a6831614d2fbc2117bd40a538af7349ae076f1 Mon Sep 17 00:00:00 2001
+From: Evgeni Golov <evgeni@debian.org>
+Date: Sun, 13 Dec 2020 12:24:18 +0100
+Subject: [PATCH] use /etc/default, not /etc/sysconfig on Debian
+
+---
+ profiles/functions | 6 +++---
+ tuned/consts.py    | 2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/profiles/functions b/profiles/functions
+index 0e1836b..8249b52 100644
+--- a/profiles/functions
++++ b/profiles/functions
+@@ -217,7 +217,7 @@ restore_disk_scheduler_quantum() {
+ CPUSPEED_SAVE_FILE="${STORAGE}/cpuspeed${STORAGE_SUFFIX}"
+ CPUSPEED_ORIG_GOV="${STORAGE}/cpuspeed-governor-%s${STORAGE_SUFFIX}"
+ CPUSPEED_STARTED="${STORAGE}/cpuspeed-started"
+-CPUSPEED_CFG="/etc/sysconfig/cpuspeed"
++CPUSPEED_CFG="/etc/default/cpuspeed"
+ CPUSPEED_INIT="/etc/init.d/cpuspeed"
+ # do not use cpuspeed
+ CPUSPEED_USE="0"
+@@ -474,7 +474,7 @@ restore_logs_syncing() {
+ }
+
+ irqbalance_banned_cpus_clear() {
+-    sed -i '/^IRQBALANCE_BANNED_CPUS=/d' /etc/sysconfig/irqbalance || return
++    sed -i '/^IRQBALANCE_BANNED_CPUS=/d' /etc/default/irqbalance || return
+     if [ ${1:-restart} = restart ]; then
+         systemctl try-restart irqbalance
+     fi
+@@ -483,7 +483,7 @@ irqbalance_banned_cpus_clear() {
+ irqbalance_banned_cpus_setup() {
+     irqbalance_banned_cpus_clear norestart
+     if [ -n "$1" ]; then
+-        echo "IRQBALANCE_BANNED_CPUS=$1" >> /etc/sysconfig/irqbalance
++        echo "IRQBALANCE_BANNED_CPUS=$1" >> /etc/default/irqbalance
+     fi
+     systemctl try-restart irqbalance
+ }
+diff --git a/tuned/consts.py b/tuned/consts.py
+index 733ad51..06c5405 100644
+--- a/tuned/consts.py
++++ b/tuned/consts.py
+@@ -57,7 +57,7 @@ SYSTEMD_SYSTEM_CONF_FILE = "/etc/systemd/system.conf"
+ SYSTEMD_CPUAFFINITY_VAR = "CPUAffinity"
+
+ # irqbalance plugin configuration
+-IRQBALANCE_SYSCONFIG_FILE = "/etc/sysconfig/irqbalance"
++IRQBALANCE_SYSCONFIG_FILE = "/etc/default/irqbalance"
+
+ # number of backups
+ LOG_FILE_COUNT = 2
+--
+2.29.2
+
