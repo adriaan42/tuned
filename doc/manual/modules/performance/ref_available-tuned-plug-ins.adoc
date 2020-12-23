@@ -84,6 +84,38 @@ It sets Aggressive Link Power Management (ALPM) to the value specified by the [o
 `mounts`::
 Enables or disables barriers for mounts according to the Boolean value of the [option]`disable_barriers` option. 
 
+`scheduler`::
+Allows tuning of scheduling priorities, processes/threads/IRQs affinities, and CPU cores isolation.
++
+The scheduler plugin uses perf event loop to catch newly created processes. By default it listens to perf.RECORD_COMM and
+perf.RECORD_EXIT events. By setting `perf_process_fork` parameter to `true`, perf.RECORD_FORK events will be also listened to.
+In other words, child processes created by the fork() system call will be processed. Since child processes inherit CPU affinity
+from their parents, the `scheduler` plugin usually does not need to explicitly process these events. As processing perf events
+can pose a significant CPU overhead, the `perf_process_fork` parameter is set to `false` by default and child processes
+are not processed by the scheduler plugin.
++
+For perf events mmapped buffer is used. Under heavy load the buffer may overflow. In such cases the `scheduler` plugin
+may start missing events and not process some newly created processes. Increasing the buffer size may help. The buffer size
+can be set with the `perf_mmap_pages` parameter. Value of this parameter has to be power of 2. If it is not the power of 2,
+the nearest bigger power of 2 value is calculated from it and this calculated value is used. If the `perf_mmap_pages`
+parameter is omitted, the default kernel value is used, which should be 128 for the recent kernels (tested on kernel-5.9.8).
++
+The `default_irq_smp_affinity` parameter controls the values *Tuned* writes to `/proc/irq/default_smp_affinity`.
+The following values are supported:
++
+--
+`calc`::
+Content of `/proc/irq/default_smp_affinity` will be calculated from the `isolated_cores` parameter.
+Non-isolated cores are calculated as an inversion of the `isolated_cores`. Then the intersection of the non-isolated cores
+and the previous content of `/proc/irq/default_smp_affinity` is written to `/proc/irq/default_smp_affinity`.
+If the intersection is an empty set, then just the non-isolated cores are written to `/proc/irq/default_smp_affinity`.
+This behavior is the default if the parameter `default_irq_smp_affinity` is omitted.
+`ignore`::
+*Tuned* will not touch `/proc/irq/default_smp_affinity`.
+cpulist such as `1,3-4`::
+The cpulist is unpacked and written directly to `/proc/irq/default_smp_affinity`.
+--
+
 `script`::
 Executes an external script or binary when the profile is loaded or unloaded. You can choose an arbitrary executable.
 +

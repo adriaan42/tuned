@@ -17,6 +17,7 @@ from tuned.utils.commands import commands
 import errno
 import os
 import collections
+import math
 
 log = tuned.logs.get()
 
@@ -83,6 +84,18 @@ class SchedulerPlugin(base.Plugin):
 		self._irq_storage_key = self._storage_key(
 				command_name = "irq")
 
+	def _calc_mmap_pages(self, mmap_pages):
+		if mmap_pages is None:
+			return None
+		try:
+			mp = int(mmap_pages)
+		except ValueError:
+			return 0
+		if mp <= 0:
+			return 0
+		# round up to the nearest power of two value
+		return int(2 ** math.ceil(math.log(mp, 2)))
+
 	def _instance_init(self, instance):
 		instance._has_dynamic_tuning = False
 		instance._has_static_tuning = True
@@ -106,12 +119,21 @@ class SchedulerPlugin(base.Plugin):
 		# calculated by isolated_cores setter
 		self._affinity = None
 
+		self._cgroup_affinity_initialized = False
 		self._cgroup = None
 		self._cgroups = collections.OrderedDict([(self._sanitize_cgroup_path(option[7:]), self._variables.expand(affinity))
 			for option, affinity in instance.options.items() if option[:7] == "cgroup." and len(option) > 7])
 
 		instance._scheduler = instance.options
 
+		perf_mmap_pages_raw = self._variables.expand(instance.options["perf_mmap_pages"])
+		perf_mmap_pages = self._calc_mmap_pages(perf_mmap_pages_raw)
+		if perf_mmap_pages == 0:
+			log.error("Invalid 'perf_mmap_pages' value specified: '%s', using default kernel value" % perf_mmap_pages_raw)
+			perf_mmap_pages = None
+		if perf_mmap_pages is not None and str(perf_mmap_pages) != perf_mmap_pages_raw:
+			log.info("'perf_mmap_pages' value has to be power of two, specified: '%s', using: '%d'" %
+				(perf_mmap_pages_raw, perf_mmap_pages))
 		for k in instance._scheduler:
 			instance._scheduler[k] = self._variables.expand(instance._scheduler[k])
 		if self._cmd.get_bool(instance._scheduler.get("runtime", 1)) == "0":
@@ -128,7 +150,10 @@ class SchedulerPlugin(base.Plugin):
 				evsel.open(cpus = self._cpus, threads = instance._threads)
 				instance._evlist = perf.evlist(self._cpus, instance._threads)
 				instance._evlist.add(evsel)
-				instance._evlist.mmap()
+				if perf_mmap_pages is None:
+					instance._evlist.mmap()
+				else:
+					instance._evlist.mmap(pages = perf_mmap_pages)
 			# no perf
 			except:
 				instance._runtime_tuning = False
@@ -146,6 +171,9 @@ class SchedulerPlugin(base.Plugin):
 			"cgroup_for_isolated_cores": None,
 			"ps_whitelist": None,
 			"ps_blacklist": None,
+			"default_irq_smp_affinity": "calc",
+			"perf_mmap_pages": None,
+			"perf_process_fork": "false",
 		}
 
 	def _sanitize_cgroup_path(self, value):
@@ -478,11 +506,14 @@ class SchedulerPlugin(base.Plugin):
 			log.error("Unable to set affinity '%s' for cgroup '%s'" % (affinity, cgroup))
 
 	def _cgroup_set_affinity(self):
+		if self._cgroup_affinity_initialized:
+			return
 		log.debug("Setting cgroups affinities")
 		if self._affinity is not None and self._cgroup is not None and not self._cgroup in self._cgroups:
 			self._cgroup_set_affinity_one(self._cgroup, self._affinity, backup = True)
 		for cg in self._cgroups.items():
 			self._cgroup_set_affinity_one(cg[0], cg[1], backup = True)
+		self._cgroup_affinity_initialized = True
 
 	def _cgroup_restore_affinity(self):
 		log.debug("Restoring cgroups affinities")
@@ -682,7 +713,8 @@ class SchedulerPlugin(base.Plugin):
 						event = instance._evlist.read_on_cpu(cpu)
 						if event:
 							read_events = True
-							if event.type == perf.RECORD_COMM:
+							if event.type == perf.RECORD_COMM or \
+								(self._perf_process_fork_value and event.type == perf.RECORD_FORK):
 								self._add_pid(instance, int(event.tid), r)
 							elif event.type == perf.RECORD_EXIT:
 								self._remove_pid(instance, int(event.tid))
@@ -702,6 +734,25 @@ class SchedulerPlugin(base.Plugin):
 			return None
 		if enabling and value is not None:
 			self._ps_blacklist = "|".join(["(%s)" % v for v in re.split(r"(?<!\\);", str(value))])
+
+	@command_custom("default_irq_smp_affinity", per_device = False)
+	def _default_irq_smp_affinity(self, enabling, value, verify, ignore_missing):
+		# currently unsupported
+		if verify:
+			return None
+		if enabling and value is not None:
+			if value in ["calc", "ignore"]:
+				self._default_irq_smp_affinity_value = value
+			else:
+				self._default_irq_smp_affinity_value = self._cmd.cpulist_unpack(value)
+
+	@command_custom("perf_process_fork", per_device = False)
+	def _perf_process_fork(self, enabling, value, verify, ignore_missing):
+		# currently unsupported
+		if verify:
+			return None
+		if enabling and value is not None:
+			self._perf_process_fork_value = self._cmd.get_bool(value) == "1"
 
 	# Raises OSError
 	# Raises SystemError with old (pre-0.4) python-schedutils
@@ -842,9 +893,13 @@ class SchedulerPlugin(base.Plugin):
 		# default affinity
 		prev_affinity_hex = self._cmd.read_file("/proc/irq/default_smp_affinity")
 		prev_affinity = self._cmd.hex2cpulist(prev_affinity_hex)
-		_affinity = self._get_intersect_affinity(prev_affinity, affinity, affinity)
-		self._set_default_irq_affinity(_affinity)
-		irq_original.default = prev_affinity
+		if self._default_irq_smp_affinity_value == "calc":
+			_affinity = self._get_intersect_affinity(prev_affinity, affinity, affinity)
+		elif self._default_irq_smp_affinity_value != "ignore":
+			_affinity = self._default_irq_smp_affinity_value
+		if self._default_irq_smp_affinity_value != "ignore":
+			self._set_default_irq_affinity(_affinity)
+			irq_original.default = prev_affinity
 		self._storage.set(self._irq_storage_key, irq_original)
 
 	def _restore_all_irq_affinity(self):
@@ -853,8 +908,9 @@ class SchedulerPlugin(base.Plugin):
 			return
 		for irq, affinity in irq_original.irqs.items():
 			self._set_irq_affinity(irq, affinity, True)
-		affinity = irq_original.default
-		self._set_default_irq_affinity(affinity)
+		if self._default_irq_smp_affinity_value != "ignore":
+			affinity = irq_original.default
+			self._set_default_irq_affinity(affinity)
 		self._storage.unset(self._irq_storage_key)
 
 	def _verify_irq_affinity(self, irq_description, correct_affinity,
@@ -894,8 +950,9 @@ class SchedulerPlugin(base.Plugin):
 		current_affinity_hex = self._cmd.read_file(
 				"/proc/irq/default_smp_affinity")
 		current_affinity = self._cmd.hex2cpulist(current_affinity_hex)
-		if not self._verify_irq_affinity("default IRQ SMP affinity",
-				current_affinity, correct_affinity):
+		if self._default_irq_smp_affinity_value != "ignore" and not self._verify_irq_affinity("default IRQ SMP affinity",
+				current_affinity, correct_affinity if self._default_irq_smp_affinity_value == "calc" else
+				self._default_irq_smp_affinity_value):
 			res = False
 		return res
 
@@ -920,6 +977,7 @@ class SchedulerPlugin(base.Plugin):
 			return self._verify_all_irq_affinity(affinity, ignore_missing)
 		elif enabling:
 			if self._cgroup:
+				self._cgroup_set_affinity()
 				ps_affinity = "cgroup.%s" % self._cgroup
 			else:
 				ps_affinity = affinity

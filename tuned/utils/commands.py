@@ -1,4 +1,5 @@
 import errno
+import hashlib
 import tuned.logs
 import copy
 import os
@@ -194,6 +195,16 @@ class commands:
 				data = re.sub(r"\b(" + o + r"\s*=).*$", r"\1" + "\"" + v + "\"", data, flags = re.MULTILINE)
 
 		return self.write_to_file(f, data)
+
+	# calcualtes md5sum of file 'f'
+	def md5sum(self, f):
+		data = self.read_file(f)
+		return hashlib.md5(str(data).encode("utf-8")).hexdigest()
+
+	# calcualtes sha256sum of file 'f'
+	def sha256sum(self, f):
+		data = self.read_file(f)
+		return hashlib.sha256(str(data).encode("utf-8")).hexdigest()
 
 	# returns machine ID or empty string "" in case of error
 	def get_machine_id(self, no_error = True):
