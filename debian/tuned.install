@@ -49,6 +49,7 @@ usr/lib/tuned/network-latency/
 usr/lib/tuned/network-throughput/
 usr/lib/tuned/optimize-serial-console/
 usr/lib/tuned/oracle/
+usr/lib/tuned/postgresql/
 usr/lib/tuned/powersave/
 usr/lib/tuned/realtime-virtual-guest/
 usr/lib/tuned/realtime-virtual-host/
