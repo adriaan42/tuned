@@ -34,7 +34,6 @@ usr/lib/tuned/atomic-host/
 usr/lib/tuned/balanced/
 usr/lib/tuned/cpu-partitioning/
 usr/lib/tuned/default/
-usr/lib/tuned/defirqaffinity.py
 usr/lib/tuned/desktop-powersave/
 usr/lib/tuned/desktop/
 usr/lib/tuned/enterprise-storage/
@@ -63,6 +62,7 @@ usr/lib/tuned/spindown-disk/
 usr/lib/tuned/throughput-performance/
 usr/lib/tuned/virtual-guest/
 usr/lib/tuned/virtual-host/
+usr/libexec/tuned/defirqaffinity.py
 usr/sbin/tuned
 usr/sbin/tuned-adm
 usr/share/bash-completion/completions/tuned-adm

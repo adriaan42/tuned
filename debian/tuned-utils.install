@@ -1,2 +1,2 @@
 usr/bin/powertop2tuned
-usr/lib/tuned/pmqos-static*
+usr/libexec/tuned/pmqos-static*
