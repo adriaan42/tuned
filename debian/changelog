@@ -1,8 +1,13 @@
-tuned (2.15.0-1) UNRELEASED; urgency=medium
+tuned (2.15.0-1) unstable; urgency=medium
 
   * New upstream release.
+  * use dmicode instead of python3-dmicode, upstream switched code
+  * move hdparm to recommends
+  * add kmod to recommends
+  * add new postgresql profile
+  * drop gustavo from uploaders on his request
 
- -- Evgeni Golov <evgeni@debian.org>  Wed, 23 Dec 2020 21:08:00 +0100
+ -- Evgeni Golov <evgeni@debian.org>  Sat, 26 Dec 2020 09:21:18 +0100
 
 tuned (2.14.0-1) unstable; urgency=medium
 
