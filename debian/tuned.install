@@ -46,6 +46,9 @@ usr/lib/tuned/latency-performance/
 usr/lib/tuned/mssql/
 usr/lib/tuned/network-latency/
 usr/lib/tuned/network-throughput/
+usr/lib/tuned/openshift-control-plane/
+usr/lib/tuned/openshift-node/
+usr/lib/tuned/openshift/
 usr/lib/tuned/optimize-serial-console/
 usr/lib/tuned/oracle/
 usr/lib/tuned/postgresql/
