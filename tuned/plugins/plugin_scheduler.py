@@ -12,12 +12,16 @@ import perf
 import select
 import tuned.consts as consts
 import procfs
-import schedutils
 from tuned.utils.commands import commands
 import errno
 import os
 import collections
 import math
+# Check existence of scheduler API in os module
+try:
+	os.SCHED_FIFO
+except AttributeError:
+	import schedutils
 
 log = tuned.logs.get()
 
@@ -52,19 +56,89 @@ class IRQAffinities(object):
 		# IRQs that don't support changing CPU affinity:
 		self.unchangeable = []
 
+class SchedulerUtils(object):
+	"""
+	Class encapsulating scheduler implementation in os module
+	"""
+
+	_dict_schedcfg2schedconst = {
+		"f": "SCHED_FIFO",
+		"b": "SCHED_BATCH",
+		"r": "SCHED_RR",
+		"o": "SCHED_OTHER",
+		"i": "SCHED_IDLE",
+	}
+
+	def __init__(self):
+		# {"f": os.SCHED_FIFO...}
+		self._dict_schedcfg2num = dict((k, getattr(os, name)) for k, name in self._dict_schedcfg2schedconst.items())
+		# { os.SCHED_FIFO: "SCHED_FIFO"... }
+		self._dict_num2schedconst = dict((getattr(os, name), name) for name in self._dict_schedcfg2schedconst.values())
+
+	def sched_cfg_to_num(self, str_scheduler):
+		return self._dict_schedcfg2num.get(str_scheduler)
+
+	# Reimplementation of schedstr from schedutils for logging purposes
+	def sched_num_to_const(self, scheduler):
+		return self._dict_num2schedconst.get(scheduler)
+
+	def get_scheduler(self, pid):
+		return os.sched_getscheduler(pid)
+
+	def set_scheduler(self, pid, sched, prio):
+		os.sched_setscheduler(pid, sched, os.sched_param(prio))
+
+	def get_affinity(self, pid):
+		return os.sched_getaffinity(pid)
+
+	def set_affinity(self, pid, affinity):
+		os.sched_setaffinity(pid, affinity)
+
+	def get_priority(self, pid):
+		return os.sched_getparam(pid).sched_priority
+
+	def get_priority_min(self, sched):
+		return os.sched_get_priority_min(sched)
+
+	def get_priority_max(self, sched):
+		return os.sched_get_priority_max(sched)
+
+class SchedulerUtilsSchedutils(SchedulerUtils):
+	"""
+	Class encapsulating scheduler implementation in schedutils module
+	"""
+	def __init__(self):
+		# { "f": schedutils.SCHED_FIFO... }
+		self._dict_schedcfg2num = dict((k, getattr(schedutils, name)) for k, name in self._dict_schedcfg2schedconst.items())
+		# { schedutils.SCHED_FIFO: "SCHED_FIFO"... }
+		self._dict_num2schedconst = dict((getattr(schedutils, name), name) for name in self._dict_schedcfg2schedconst.values())
+
+	def get_scheduler(self, pid):
+		return schedutils.get_scheduler(pid)
+
+	def set_scheduler(self, pid, sched, prio):
+		schedutils.set_scheduler(pid, sched, prio)
+
+	def get_affinity(self, pid):
+		return schedutils.get_affinity(pid)
+
+	def set_affinity(self, pid, affinity):
+		schedutils.set_affinity(pid, affinity)
+
+	def get_priority(self, pid):
+		return schedutils.get_priority(pid)
+
+	def get_priority_min(self, sched):
+		return schedutils.get_priority_min(sched)
+
+	def get_priority_max(self, sched):
+		return schedutils.get_priority_max(sched)
+
 class SchedulerPlugin(base.Plugin):
 	"""
 	Plugin for tuning of scheduler. Currently it can control scheduling
 	priorities of system threads (it is substitution for the rtctl tool).
 	"""
-
-	_dict_schedcfg2num = {
-			"f": schedutils.SCHED_FIFO,
-			"b": schedutils.SCHED_BATCH,
-			"r": schedutils.SCHED_RR,
-			"o": schedutils.SCHED_OTHER,
-			"i": schedutils.SCHED_IDLE,
-			}
 
 	def __init__(self, monitor_repository, storage_factory, hardware_inventory, device_matcher, device_matcher_udev, plugin_instance_factory, global_cfg, variables):
 		super(SchedulerPlugin, self).__init__(monitor_repository, storage_factory, hardware_inventory, device_matcher, device_matcher_udev, plugin_instance_factory, global_cfg, variables)
@@ -75,14 +149,23 @@ class SchedulerPlugin(base.Plugin):
 			self._daemon = global_cfg.get_bool(consts.CFG_DAEMON, consts.CFG_DEF_DAEMON)
 			self._sleep_interval = int(global_cfg.get(consts.CFG_SLEEP_INTERVAL, consts.CFG_DEF_SLEEP_INTERVAL))
 		self._cmd = commands()
+		# helper variable utilized for showing hint only once that the error may be caused by Secure Boot
+		self._secure_boot_hint = None
+		# paths cache for sched_ and numa_ tunings
+		self._sched_knob_paths_cache = {}
 		# default is to whitelist all and blacklist none
 		self._ps_whitelist = ".*"
 		self._ps_blacklist = ""
+		self._cgroup_ps_blacklist_re = ""
 		self._cpus = perf.cpu_map()
 		self._scheduler_storage_key = self._storage_key(
 				command_name = "scheduler")
 		self._irq_storage_key = self._storage_key(
 				command_name = "irq")
+		try:
+			self._scheduler_utils = SchedulerUtils()
+		except AttributeError:
+			self._scheduler_utils = SchedulerUtilsSchedutils()
 
 	def _calc_mmap_pages(self, mmap_pages):
 		if mmap_pages is None:
@@ -169,11 +252,22 @@ class SchedulerPlugin(base.Plugin):
 			"cgroup_mount_point_init": False,
 			"cgroup_groups_init": True,
 			"cgroup_for_isolated_cores": None,
+			"cgroup_ps_blacklist": None,
 			"ps_whitelist": None,
 			"ps_blacklist": None,
 			"default_irq_smp_affinity": "calc",
 			"perf_mmap_pages": None,
 			"perf_process_fork": "false",
+			"sched_min_granularity_ns": None,
+			"sched_latency_ns": None,
+			"sched_wakeup_granularity_ns": None,
+			"sched_tunable_scaling": None,
+			"sched_migration_cost_ns": None,
+			"sched_nr_migrate": None,
+			"numa_balancing_scan_delay_ms": None,
+			"numa_balancing_scan_period_min_ms": None,
+			"numa_balancing_scan_period_max_ms": None,
+			"numa_balancing_scan_size_mb": None
 		}
 
 	def _sanitize_cgroup_path(self, value):
@@ -216,20 +310,20 @@ class SchedulerPlugin(base.Plugin):
 	# instead of OSError
 	# If PID doesn't exist, errno == ESRCH
 	def _get_rt(self, pid):
-		scheduler = schedutils.get_scheduler(pid)
-		sched_str = schedutils.schedstr(scheduler)
-		priority = schedutils.get_priority(pid)
+		scheduler = self._scheduler_utils.get_scheduler(pid)
+		sched_str = self._scheduler_utils.sched_num_to_const(scheduler)
+		priority = self._scheduler_utils.get_priority(pid)
 		log.debug("Read scheduler policy '%s' and priority '%d' of PID '%d'"
 				% (sched_str, priority, pid))
 		return (scheduler, priority)
 
 	def _set_rt(self, pid, sched, prio):
-		sched_str = schedutils.schedstr(sched)
+		sched_str = self._scheduler_utils.sched_num_to_const(sched)
 		log.debug("Setting scheduler policy to '%s' and priority to '%d' of PID '%d'."
 				% (sched_str, prio, pid))
 		try:
-			prio_min = schedutils.get_priority_min(sched)
-			prio_max = schedutils.get_priority_max(sched)
+			prio_min = self._scheduler_utils.get_priority_min(sched)
+			prio_max = self._scheduler_utils.get_priority_max(sched)
 			if prio < prio_min or prio > prio_max:
 				log.error("Priority for %s must be in range %d - %d. '%d' was given."
 						% (sched_str, prio_min,
@@ -240,7 +334,7 @@ class SchedulerPlugin(base.Plugin):
 			log.error("Failed to get allowed priority range: %s"
 					% e)
 		try:
-			schedutils.set_scheduler(pid, sched, prio)
+			self._scheduler_utils.set_scheduler(pid, sched, prio)
 		except (SystemError, OSError) as e:
 			if hasattr(e, "errno") and e.errno == errno.ESRCH:
 				log.debug("Failed to set scheduling parameters of PID %d, the task vanished."
@@ -404,7 +498,7 @@ class SchedulerPlugin(base.Plugin):
 		self._scheduler_original[pid].cmdline = cmd
 
 	def _convert_sched_params(self, str_scheduler, str_priority):
-		scheduler = self._dict_schedcfg2num.get(str_scheduler)
+		scheduler = self._scheduler_utils.sched_cfg_to_num(str_scheduler)
 		if scheduler is None and str_scheduler != "*":
 			log.error("Invalid scheduler: %s. Scheduler and priority will be ignored."
 					% str_scheduler)
@@ -719,6 +813,14 @@ class SchedulerPlugin(base.Plugin):
 							elif event.type == perf.RECORD_EXIT:
 								self._remove_pid(instance, int(event.tid))
 
+	@command_custom("cgroup_ps_blacklist", per_device = False)
+	def _cgroup_ps_blacklist(self, enabling, value, verify, ignore_missing):
+		# currently unsupported
+		if verify:
+			return None
+		if enabling and value is not None:
+			self._cgroup_ps_blacklist_re = "|".join(["(%s)" % v for v in re.split(r"(?<!\\);", str(value))])
+
 	@command_custom("ps_whitelist", per_device = False)
 	def _ps_whitelist(self, enabling, value, verify, ignore_missing):
 		# currently unsupported
@@ -759,14 +861,14 @@ class SchedulerPlugin(base.Plugin):
 	# instead of OSError
 	# If PID doesn't exist, errno == ESRCH
 	def _get_affinity(self, pid):
-		res = schedutils.get_affinity(pid)
+		res = self._scheduler_utils.get_affinity(pid)
 		log.debug("Read affinity '%s' of PID %d" % (res, pid))
 		return res
 
 	def _set_affinity(self, pid, affinity):
 		log.debug("Setting CPU affinity of PID %d to '%s'." % (pid, affinity))
 		try:
-			schedutils.set_affinity(pid, affinity)
+			self._scheduler_utils.set_affinity(pid, affinity)
 			return True
 		# Workaround for old python-schedutils (pre-0.4) which
 		# incorrectly raised SystemError instead of OSError
@@ -794,6 +896,9 @@ class SchedulerPlugin(base.Plugin):
 		if self._ps_blacklist != "":
 			psl = [v for v in psl if re.search(self._ps_blacklist,
 					self._get_stat_comm(v)) is None]
+		if self._cgroup_ps_blacklist_re != "":
+			psl = [v for v in psl if re.search(self._cgroup_ps_blacklist_re,
+					self._get_stat_cgroup(v)) is None]
 		psd = dict([(v.pid, v) for v in psl])
 		for pid in psd:
 			try:
@@ -818,6 +923,12 @@ class SchedulerPlugin(base.Plugin):
 				self._set_all_obj_affinity(
 						psd[pid]["threads"].values(),
 						affinity, True)
+
+	def _get_stat_cgroup(self, o):
+		try:
+			return o["cgroups"]
+		except (OSError, IOError, KeyError):
+			return ""
 
 	def _get_stat_comm(self, o):
 		try:
@@ -987,3 +1098,117 @@ class SchedulerPlugin(base.Plugin):
 			# Restoring processes' affinity is done in
 			# _instance_unapply_static()
 			self._restore_all_irq_affinity()
+
+	def _get_sched_knob_path(self, prefix, namespace, knob):
+		key = "%s_%s_%s" % (prefix, namespace, knob)
+		path = self._sched_knob_paths_cache.get(key)
+		if path:
+			return path
+		path = "/proc/sys/kernel/%s_%s" % (namespace, knob)
+		if not os.path.exists(path):
+			if prefix == "":
+				path = "%s/%s" % (namespace, knob)
+			else:
+				path = "%s/%s/%s" % (prefix, namespace, knob)
+			path = "/sys/kernel/debug/%s" % path
+			if self._secure_boot_hint is None:
+				self._secure_boot_hint = True
+		self._sched_knob_paths_cache[key] = path
+		return path
+
+	def _get_sched_knob(self, prefix, namespace, knob):
+		data = self._cmd.read_file(self._get_sched_knob_path(prefix, namespace, knob), err_ret = None)
+		if data is None:
+			log.error("Error reading '%s'" % knob)
+			if self._secure_boot_hint:
+				log.error("This may not work with Secure Boot or kernel_lockdown (this hint is logged only once)")
+				self._secure_boot_hint = False
+		return data
+
+	def _set_sched_knob(self, prefix, namespace, knob, value, sim):
+		if value is None:
+			return None
+		if not sim:
+			if not self._cmd.write_to_file(self._get_sched_knob_path(prefix, namespace, knob), value):
+				log.error("Error writing value '%s' to '%s'" % (value, knob))
+		return value
+
+	@command_get("sched_min_granularity_ns")
+	def _get_sched_min_granularity_ns(self):
+		return self._get_sched_knob("", "sched", "min_granularity_ns")
+
+	@command_set("sched_min_granularity_ns")
+	def _set_sched_min_granularity_ns(self, value, sim):
+		return self._set_sched_knob("", "sched", "min_granularity_ns", value, sim)
+
+	@command_get("sched_latency_ns")
+	def _get_sched_latency_ns(self):
+		return self._get_sched_knob("", "sched", "latency_ns")
+
+	@command_set("sched_latency_ns")
+	def _set_sched_latency_ns(self, value, sim):
+		return self._set_sched_knob("", "sched", "latency_ns", value, sim)
+
+	@command_get("sched_wakeup_granularity_ns")
+	def _get_sched_wakeup_granularity_ns(self):
+		return self._get_sched_knob("", "sched", "wakeup_granularity_ns")
+
+	@command_set("sched_wakeup_granularity_ns")
+	def _set_sched_wakeup_granularity_ns(self, value, sim):
+		return self._set_sched_knob("", "sched", "wakeup_granularity_ns", value, sim)
+
+	@command_get("sched_tunable_scaling")
+	def _get_sched_tunable_scaling(self):
+		return self._get_sched_knob("", "sched", "tunable_scaling")
+
+	@command_set("sched_tunable_scaling")
+	def _set_sched_tunable_scaling(self, value, sim):
+		return self._set_sched_knob("", "sched", "tunable_scaling", value, sim)
+
+	@command_get("sched_migration_cost_ns")
+	def _get_sched_migration_cost_ns(self):
+		return self._get_sched_knob("", "sched", "migration_cost_ns")
+
+	@command_set("sched_migration_cost_ns")
+	def _set_sched_migration_cost_ns(self, value, sim):
+		return self._set_sched_knob("", "sched", "migration_cost_ns", value, sim)
+
+	@command_get("sched_nr_migrate")
+	def _get_sched_nr_migrate(self):
+		return self._get_sched_knob("", "sched", "nr_migrate")
+
+	@command_set("sched_nr_migrate")
+	def _set_sched_nr_migrate(self, value, sim):
+		return self._set_sched_knob("", "sched", "nr_migrate", value, sim)
+
+	@command_get("numa_balancing_scan_delay_ms")
+	def _get_numa_balancing_scan_delay_ms(self):
+		return self._get_sched_knob("sched", "numa_balancing", "scan_delay_ms")
+
+	@command_set("numa_balancing_scan_delay_ms")
+	def _set_numa_balancing_scan_delay_ms(self, value, sim):
+		return self._set_sched_knob("sched", "numa_balancing", "scan_delay_ms", value, sim)
+
+	@command_get("numa_balancing_scan_period_min_ms")
+	def _get_numa_balancing_scan_period_min_ms(self):
+		return self._get_sched_knob("sched", "numa_balancing", "scan_period_min_ms")
+
+	@command_set("numa_balancing_scan_period_min_ms")
+	def _set_numa_balancing_scan_period_min_ms(self, value, sim):
+		return self._set_sched_knob("sched", "numa_balancing", "scan_period_min_ms", value, sim)
+
+	@command_get("numa_balancing_scan_period_max_ms")
+	def _get_numa_balancing_scan_period_max_ms(self):
+		return self._get_sched_knob("sched", "numa_balancing", "scan_period_max_ms")
+
+	@command_set("numa_balancing_scan_period_max_ms")
+	def _set_numa_balancing_scan_period_max_ms(self, value, sim):
+		return self._set_sched_knob("sched", "numa_balancing", "scan_period_max_ms", value, sim)
+
+	@command_get("numa_balancing_scan_size_mb")
+	def _get_numa_balancing_scan_size_mb(self):
+		return self._get_sched_knob("sched", "numa_balancing", "scan_size_mb")
+
+	@command_set("numa_balancing_scan_size_mb")
+	def _set_numa_balancing_scan_size_mb(self, value, sim):
+		return self._set_sched_knob("sched", "numa_balancing", "scan_size_mb", value, sim)

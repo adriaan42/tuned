@@ -44,7 +44,7 @@
 
 Summary: A dynamic adaptive system tuning daemon
 Name: tuned
-Version: 2.15.0
+Version: 2.18.0
 Release: 1%{?prerel1}%{?with_snapshot:.%{git_suffix}}%{?dist}
 License: GPLv2+
 Source0: https://github.com/redhat-performance/%{name}/archive/v%{version}%{?prerel2}/%{name}-%{version}%{?prerel2}.tar.gz
@@ -59,16 +59,19 @@ BuildRequires: asciidoctor
 Requires(post): systemd, virt-what
 Requires(preun): systemd
 Requires(postun): systemd
+BuildRequires: make
 BuildRequires: %{_py}, %{_py}-devel
 # BuildRequires for 'make test'
 # python-mock is needed for python-2.7, but it's not available on RHEL-7
 %if %{without python3} && ( ! 0%{?rhel} || 0%{?rhel} >= 8 )
 BuildRequires: %{_py}-mock
 %endif
-BuildRequires: %{_py}-configobj
-BuildRequires: %{_py}-decorator, %{_py}-pyudev
-Requires: %{_py}-decorator, %{_py}-pyudev, %{_py}-configobj
-Requires: %{_py}-schedutils, %{_py}-linux-procfs, %{_py}-perf
+BuildRequires: %{_py}-pyudev
+Requires: %{_py}-pyudev
+Requires: %{_py}-linux-procfs, %{_py}-perf
+%if %{without python3}
+Requires: %{_py}-schedutils
+%endif
 # requires for packages with inconsistent python2/3 names
 %if %{with python3}
 # BuildRequires for 'make test'
@@ -89,9 +92,18 @@ Recommends: dmidecode
 Recommends: hdparm
 Recommends: kernel-tools
 Recommends: kmod
+Recommends: iproute
 %endif
+# syspurpose
+%if 0%{?rhel} > 8
+# not on CentOS
+%if 0%{!?centos:1}
+Recommends: subscription-manager
+%endif
+%else
 %if 0%{?rhel} > 7
 Requires: python3-syspurpose
+%endif
 %endif
 
 %description
@@ -245,8 +257,15 @@ Requires: %{name} = %{version}
 %description profiles-postgresql
 Additional tuned profile(s) targeted to PostgreSQL server loads.
 
+%package profiles-openshift
+Summary: Additional TuneD profile(s) optimized for OpenShift
+Requires: %{name} = %{version}
+
+%description profiles-openshift
+Additional TuneD profile(s) optimized for OpenShift.
+
 %prep
-%setup -q -n %{name}-%{version}%{?prerel2}
+%autosetup -p1 -n %{name}-%{version}%{?prerel2}
 
 %build
 # Docs cannot be generated on RHEL now due to missing asciidoctor dependency
@@ -369,7 +388,6 @@ fi
 
 
 %files
-%defattr(-,root,root,-)
 %exclude %{docdir}/README.utils
 %exclude %{docdir}/README.scomes
 %exclude %{docdir}/README.NFV
@@ -407,6 +425,9 @@ fi
 %exclude %{_prefix}/lib/tuned/cpu-partitioning
 %exclude %{_prefix}/lib/tuned/spectrumscale-ece
 %exclude %{_prefix}/lib/tuned/postgresql
+%exclude %{_prefix}/lib/tuned/openshift
+%exclude %{_prefix}/lib/tuned/openshift-control-plane
+%exclude %{_prefix}/lib/tuned/openshift-node
 %{_prefix}/lib/tuned
 %dir %{_sysconfdir}/tuned
 %dir %{_sysconfdir}/tuned/recommend.d
@@ -434,7 +455,6 @@ fi
 %{_prefix}/lib/kernel/install.d/92-tuned.install
 
 %files gtk
-%defattr(-,root,root,-)
 %{_sbindir}/tuned-gui
 %if %{with python3}
 %{python3_sitelib}/tuned/gtk
@@ -451,7 +471,6 @@ fi
 %{_libexecdir}/tuned/pmqos-static*
 
 %files utils-systemtap
-%defattr(-,root,root,-)
 %doc doc/README.utils
 %doc doc/README.scomes
 %doc COPYING
@@ -465,66 +484,54 @@ fi
 %{_mandir}/man8/scomes.*
 
 %files profiles-sap
-%defattr(-,root,root,-)
 %{_prefix}/lib/tuned/sap-netweaver
 %{_mandir}/man7/tuned-profiles-sap.7*
 
 %files profiles-sap-hana
-%defattr(-,root,root,-)
 %{_prefix}/lib/tuned/sap-hana
 %{_mandir}/man7/tuned-profiles-sap-hana.7*
 
 %files profiles-mssql
-%defattr(-,root,root,-)
 %{_prefix}/lib/tuned/mssql
 %{_mandir}/man7/tuned-profiles-mssql.7*
 
 %files profiles-oracle
-%defattr(-,root,root,-)
 %{_prefix}/lib/tuned/oracle
 %{_mandir}/man7/tuned-profiles-oracle.7*
 
 %files profiles-atomic
-%defattr(-,root,root,-)
 %{_prefix}/lib/tuned/atomic-host
 %{_prefix}/lib/tuned/atomic-guest
 %{_mandir}/man7/tuned-profiles-atomic.7*
 
 %files profiles-realtime
-%defattr(-,root,root,-)
 %config(noreplace) %{_sysconfdir}/tuned/realtime-variables.conf
 %{_prefix}/lib/tuned/realtime
 %{_mandir}/man7/tuned-profiles-realtime.7*
 
 %files profiles-nfv-guest
-%defattr(-,root,root,-)
 %config(noreplace) %{_sysconfdir}/tuned/realtime-virtual-guest-variables.conf
 %{_prefix}/lib/tuned/realtime-virtual-guest
 %{_mandir}/man7/tuned-profiles-nfv-guest.7*
 
 %files profiles-nfv-host
-%defattr(-,root,root,-)
 %config(noreplace) %{_sysconfdir}/tuned/realtime-virtual-host-variables.conf
 %{_prefix}/lib/tuned/realtime-virtual-host
 %{_mandir}/man7/tuned-profiles-nfv-host.7*
 
 %files profiles-nfv
-%defattr(-,root,root,-)
 %doc %{docdir}/README.NFV
 
 %files profiles-cpu-partitioning
-%defattr(-,root,root,-)
 %config(noreplace) %{_sysconfdir}/tuned/cpu-partitioning-variables.conf
 %{_prefix}/lib/tuned/cpu-partitioning
 %{_mandir}/man7/tuned-profiles-cpu-partitioning.7*
 
 %files profiles-spectrumscale
-%defattr(-,root,root,-)
 %{_prefix}/lib/tuned/spectrumscale-ece
 %{_mandir}/man7/tuned-profiles-spectrumscale-ece.7*
 
 %files profiles-compat
-%defattr(-,root,root,-)
 %{_prefix}/lib/tuned/default
 %{_prefix}/lib/tuned/desktop-powersave
 %{_prefix}/lib/tuned/laptop-ac-powersave
@@ -535,11 +542,104 @@ fi
 %{_mandir}/man7/tuned-profiles-compat.7*
 
 %files profiles-postgresql
-%defattr(-,root,root,-)
 %{_prefix}/lib/tuned/postgresql
 %{_mandir}/man7/tuned-profiles-postgresql.7*
 
+%files profiles-openshift
+%{_prefix}/lib/tuned/openshift
+%{_prefix}/lib/tuned/openshift-control-plane
+%{_prefix}/lib/tuned/openshift-node
+%{_mandir}/man7/tuned-profiles-openshift.7*
+
 %changelog
+* Wed Feb  9 2022 Jaroslav Škarvada <jskarvad@redhat.com> - 2.18.0-1
+- new release
+  - rebased tuned to latest upstream
+    related: rhbz#2003833
+  - tuned-gui: fixed creation of new profile
+
+* Wed Feb  2 2022 Jaroslav Škarvada <jskarvad@redhat.com> - 2.18.0-0.1.rc1
+- new release
+  - rebased tuned to latest upstream
+    resolves: rhbz#2003833
+  - profiles: fix improper parsing of include directive
+    resolves: rhbz#2017924
+  - disk: added support for the nvme
+    resolves: rhbz#1854816
+  - cpu: extended cstate force_latency syntax to allow skipping zero latency
+    resolves: rhbz#2002744
+  - net: added support for the txqueuelen
+    resolves: rhbz#2015044
+  - bootloader: on s390(x) remove TuneD variables from the BLS
+    resolves: rhbz#1978786
+  - daemon: don't do full rollback on systemd failure
+    resolves: rhbz#2011459
+  - spec: do not require subscription-manager on CentOS
+    resolves: rhbz#2028865
+
+* Sun Jan 16 2022 Jaroslav Škarvada <jskarvad@redhat.com> - 2.17.0-1
+- new release
+  - rebased tuned to latest upstream
+    related: rhbz#2003838
+
+* Sun Jan  2 2022 Jaroslav Škarvada <jskarvad@redhat.com> - 2.17.0-0.1.rc1
+- new release
+  - rebased tuned to latest upstream
+    resolves: rhbz#2003838
+  - cpu-partitioning: fixed no_balance_cores on newer kernels
+    resolves: rhbz#1874596
+  - scheduler: allow exclude of processes from the specific cgroup(s)
+    resolves: rhbz#1980715
+  - switched to the configparser from the configobj
+    resolves: rhbz#1936386
+  - spec: do not require subscription-manager on CentOS
+    resolves: rhbz#2029405
+
+* Wed Jul 21 2021 Jaroslav Škarvada <jskarvad@redhat.com> - 2.16.0-1
+- new release
+  - rebased tuned to latest upstream
+    related: rhbz#1936426
+
+* Wed Jul  7 2021 Jaroslav Škarvada <jskarvad@redhat.com> - 2.16.0-0.1.rc1
+- new release
+  - rebased tuned to latest upstream
+    resolves: rhbz#1936426
+  - realtime: "isolate_managed_irq=Y" should be mentioned in
+    "/etc/tuned/realtime-virtual-*-variables.conf"
+    resolves: rhbz#1817827
+  - realtime: changed tuned default to "isolcpus=domain,managed_irq,X-Y"
+    resolves: rhbz#1820626
+  - applying a profile with multiple inheritance where parents include a common
+    ancestor fails
+    resolves: rhbz#1825882
+  - failure in moving i40e IRQ threads to housekeeping CPUs from isolated CPUs
+    resolves: rhbz#1933069
+  - sort network devices before matching by regex
+    resolves: rhbz#1939970
+  - net: fixed traceback while adjusting the netdev queue count
+    resolves: rhbz#1943291
+  - net: fixed traceback if the first listed device returns netlink error
+    resolves: rhbz#1944686
+  - realtime: improve verification
+    resolves: rhbz#1947858
+  - bootloader: add support for the rpm-ostree
+    resolves: rhbz#1950164
+  - net: fixed traceback if a device channel contains n/a
+    resolves: rhbz#1974071
+  - mssql: updated the profile
+    resolves: rhbz#1942733
+  - realtime: disabled kvm.nx_huge_page kernel module option in
+    realtime-virtual-host profile
+    resolves: rhbz#1976825
+  - realtime: explicitly set 'irqaffinity=~<isolated_cpu_mask>' in kernel
+    command line
+    resolves: rhbz#1974820
+  - scheduler: added abstraction for the sched_* and numa_* variables which
+    were previously accessible through the sysctl
+    resolves: rhbz#1952687
+  - recommend: fixed wrong profile on ppc64le bare metal servers
+    resolves: rhbz#1959889
+
 * Thu Dec 17 2020 Jaroslav Škarvada <jskarvad@redhat.com> - 2.15.0-1
 - new release
   - rebased tuned to latest upstream

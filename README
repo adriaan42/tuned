@@ -1,4 +1,4 @@
-Tuned: Daemon for monitoring and adaptive tuning of system devices.
+TuneD: Daemon for monitoring and adaptive tuning of system devices.
 
 (This is tuned 2.0 with a new code base. If you are looking for the older
 version, please check out branch '1.0' in our Git repository.)
@@ -6,10 +6,13 @@ version, please check out branch '1.0' in our Git repository.)
 How to use it
 -------------
 
+TuneD is incompatible with the cpupower and power-profiles-daemon. If you
+have these services, uninstall or disable them.
+
 In Fedora, Red Hat Enterprise Linux, and their derivates install tuned package
 (optionally tuned-utils, tuned-utils-systemtap, and tuned-profiles-compat):
 
-# yum install tuned
+# dnf install tuned
 
 After the installation, start the tuned service:
 
@@ -81,7 +84,7 @@ See the file CONTRIBUTING.md for guidelines for contributing.
 License
 -------
 
-Copyright (C) 2008-2019 Red Hat, Inc.
+Copyright (C) 2008-2021 Red Hat, Inc.
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -105,6 +108,6 @@ differently, see the file for the text of the license.
 
 The icon:
 
-The Tuned icon was created by Mariia Leonova <mleonova@redhat.com> and it is
+The TuneD icon was created by Mariia Leonova <mleonova@redhat.com> and it is
 licensed under Creative Commons Attribution-ShareAlike 3.0 license
 (http://creativecommons.org/licenses/by-sa/3.0/legalcode).

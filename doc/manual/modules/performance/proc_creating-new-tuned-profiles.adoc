@@ -1,11 +1,19 @@
+:_module-type: PROCEDURE
 [id="creating-new-tuned-profiles_{context}"]
-= Creating new Tuned profiles
+= Creating new TuneD profiles
 
-This procedure creates a new *Tuned* profile with custom performance rules.
+[role="_abstract"]
+This procedure creates a new *TuneD* profile with custom performance rules.
 
 .Prerequisites
 
-* The `tuned` service is installed and running. See xref:installing-and-enabling-tuned_getting-started-with-tuned[] for details.
+ifndef::pantheonenv[]
+* The `tuned` service is running. See xref:installing-and-enabling-tuned_getting-started-with-tuned[Installing and Enabling Tuned] for details.
+endif::[]
+
+ifdef::pantheonenv[]
+* The `tuned` service is running. See xref:modules/performance/proc_installing-and-enabling-tuned.adoc[Installing and Enabling Tuned] for details.
+endif::[]
 
 .Procedure
 
@@ -22,7 +30,7 @@ For example, see the configuration of the `balanced` profile:
 +
 ----
 [main]
-summary=General non-specialized tuned profile
+summary=General non-specialized TuneD profile
 
 [cpu]
 governor=conservative
@@ -45,7 +53,7 @@ alpm=medium_power
 # tuned-adm profile [replaceable]_my-profile_
 ----
 
-. Verify that the *Tuned* profile is active and the system settings are applied:
+. Verify that the *TuneD* profile is active and the system settings are applied:
 +
 [subs=+quotes]
 ----
@@ -58,10 +66,9 @@ Current active profile: [replaceable]_my-profile_
 $ tuned-adm verify
 
 Verfication succeeded, current system settings match the preset profile.
-See tuned log file ('/var/log/tuned/tuned.log') for details.
+See TuneD log file ('/var/log/tuned/tuned.log') for details.
 ----
 
+[role="_additional-resources"]
 .Additional resources
-
-* The `tuned.conf(5)` man page
-
+* `tuned.conf(5)` man page
