@@ -6,7 +6,7 @@ tuned (2.19.0-1) UNRELEASED; urgency=medium
   * also use libexec paths when installing files
 
   [ Adriaan Schmidt ]
-  * 
+  * add patch: path to grub config
 
  -- Adriaan Schmidt <adriaan.schmidt@siemens.com>  Tue, 04 Oct 2022 16:08:36 +0200
 
