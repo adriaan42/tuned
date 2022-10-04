@@ -44,7 +44,7 @@
 
 Summary: A dynamic adaptive system tuning daemon
 Name: tuned
-Version: 2.18.0
+Version: 2.19.0
 Release: 1%{?prerel1}%{?with_snapshot:.%{git_suffix}}%{?dist}
 License: GPLv2+
 Source0: https://github.com/redhat-performance/%{name}/archive/v%{version}%{?prerel2}/%{name}-%{version}%{?prerel2}.tar.gz
@@ -62,8 +62,8 @@ Requires(postun): systemd
 BuildRequires: make
 BuildRequires: %{_py}, %{_py}-devel
 # BuildRequires for 'make test'
-# python-mock is needed for python-2.7, but it's not available on RHEL-7
-%if %{without python3} && ( ! 0%{?rhel} || 0%{?rhel} >= 8 )
+# python-mock is needed for python-2.7, but it's not available on RHEL-7, only in the EPEL
+%if %{without python3} && ( ! 0%{?rhel} || 0%{?rhel} >= 8 || 0%{?epel})
 BuildRequires: %{_py}-mock
 %endif
 BuildRequires: %{_py}-pyudev
@@ -89,10 +89,11 @@ Requires: virt-what, ethtool, gawk
 Requires: util-linux, dbus, polkit
 %if 0%{?fedora} > 22 || 0%{?rhel} > 7
 Recommends: dmidecode
-Recommends: hdparm
+# i686 excluded
 Recommends: kernel-tools
-Recommends: kmod
-Recommends: iproute
+Requires: hdparm
+Requires: kmod
+Requires: iproute
 %endif
 # syspurpose
 %if 0%{?rhel} > 8
@@ -301,10 +302,9 @@ touch %{buildroot}%{_sysconfdir}/modprobe.d/kvm.rt.tuned.conf
 # validate desktop file
 desktop-file-validate %{buildroot}%{_datadir}/applications/tuned-gui.desktop
 
-# Run tests on RHEL > 7 or non RHEL
-# We cannot run tests on RHEL-7 because there is no python-mock package and
+# On RHEL-7 EPEL is needed, because there is no python-mock package and
 # python-2.7 doesn't have mock built-in
-%if 0%{?rhel} > 7 || ! 0%{?rhel}
+%if 0%{?rhel} >= 8 || 0%{?epel} || ! 0%{?rhel}
 %check
 make test %{make_python_arg}
 %endif
@@ -552,6 +552,26 @@ fi
 %{_mandir}/man7/tuned-profiles-openshift.7*
 
 %changelog
+* Fri Aug 19 2022 Jaroslav Škarvada <jskarvad@redhat.com> - 2.19.0-1
+- new release
+  - rebased tuned to latest upstream
+    related: rhbz#2057609
+
+* Tue Aug  9 2022 Jaroslav Škarvada <jskarvad@redhat.com> - 2.19.0-0.1.rc1
+- new release
+  - rebased tuned to latest upstream
+    resolves: rhbz#2057609
+  - fixed parsing of inline comments
+    resolves: rhbz#2060138
+  - added support for quotes in isolated_cores specification
+    resolves: rhbz#1891036
+  - spec: reduced weak dependencies
+    resolves: rhbz#2093841
+  - recommend: do not ignore syspurpose_role if there is no syspurpose
+    resolves: rhbz#2030580
+  - added support for initial autosetup of isolated_cores
+    resolves: rhbz#2093847
+
 * Wed Feb  9 2022 Jaroslav Škarvada <jskarvad@redhat.com> - 2.18.0-1
 - new release
   - rebased tuned to latest upstream
