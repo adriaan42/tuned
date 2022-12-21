@@ -1,0 +1,54 @@
+From fbdfb085cef5b0f5cfffda6e61315ad08d1fc85f Mon Sep 17 00:00:00 2001
+From: Adriaan Schmidt <adriaan.schmidt@siemens.com>
+Date: Thu, 10 Mar 2022 07:21:44 +0000
+Subject: [PATCH] bootloader: find alternative executable for grub2-editenv
+
+This supports the detection of alternatives for external executables
+at run time. In this specific case the issue is the call to `grub2-editenv`,
+which on Debian is called `grub-editenv`.
+
+Signed-off-by: Adriaan Schmidt <adriaan.schmidt@siemens.com>
+---
+ tuned/plugins/plugin_bootloader.py | 6 +++++-
+ tuned/utils/commands.py            | 8 ++++++++
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/tuned/plugins/plugin_bootloader.py b/tuned/plugins/plugin_bootloader.py
+index 95e52c6..7939023 100644
+--- a/tuned/plugins/plugin_bootloader.py
++++ b/tuned/plugins/plugin_bootloader.py
+@@ -518,7 +518,11 @@ class BootloaderPlugin(base.Plugin):
+ 	def _update_grubenv(self, d):
+ 		log.debug("updating grubenv, setting %s" % str(d))
+ 		l = ["%s=%s" % (str(option), str(value)) for option, value in d.items()]
+-		(rc, out) = self._cmd.execute(["grub2-editenv", "-", "set"] + l)
++		editenv = self._cmd.which("grub2-editenv", "grub-editenv")
++		if editenv is None:
++			log.warn("cannot find grub*-editenv to update grubenv")
++			return False
++		(rc, out) = self._cmd.execute([editenv, "-", "set"] + l)
+ 		if rc != 0:
+ 			log.warn("cannot update grubenv: '%s'" % out)
+ 			return False
+diff --git a/tuned/utils/commands.py b/tuned/utils/commands.py
+index 0a53f76..0fd1dde 100644
+--- a/tuned/utils/commands.py
++++ b/tuned/utils/commands.py
+@@ -210,6 +210,14 @@ class commands:
+ 	def get_machine_id(self, no_error = True):
+ 		return self.read_file(consts.MACHINE_ID_FILE, no_error).strip()
+ 
++	# find executable. when given multiple options, return the first match.
++	def which(self, *args):
++		for option in args:
++			executable = shutil.which(option)
++			if executable is not None:
++				return executable
++		return None
++
+ 	# "no_errors" can be list of return codes not treated as errors, if 0 is in no_errors, it means any error
+ 	# returns (retcode, out), where retcode is exit code of the executed process or -errno if
+ 	# OSError or IOError exception happened
+-- 
+2.35.1
+

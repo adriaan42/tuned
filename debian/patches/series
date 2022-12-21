@@ -1,2 +1,4 @@
 etc-default.patch
 explicitly-use-bin-bash-for-tuned-scripts.patch
+path-to-grub.cfg.patch
+find-alternative-executable-for-grub2-editenv.patch
