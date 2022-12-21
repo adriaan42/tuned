@@ -9,13 +9,11 @@ Build-Depends: debhelper-compat (= 13),
                hdparm,
                pkg-config,
                python3-all,
-               python3-configobj,
                python3-dbus,
-               python3-decorator,
                python3-gi,
                python3-pyudev,
                systemd
-Standards-Version: 4.5.1
+Standards-Version: 4.6.0
 Homepage: https://tuned-project.org/
 Vcs-Git: https://salsa.debian.org/debian/tuned.git
 Vcs-Browser: https://salsa.debian.org/debian/tuned
@@ -28,16 +26,14 @@ Depends: dbus,
          ncat,
          policykit-1 (>= 0.105-17~),
          procps,
-         python3-configobj,
          python3-dbus,
-         python3-decorator,
          python3-linux-procfs,
          python3-gi,
          python3-pyudev,
          virt-what,
          ${misc:Depends},
          ${python3:Depends}
-Recommends: linux-cpupower, dmidecode, hdparm, kmod
+Recommends: linux-cpupower, dmidecode, hdparm, iproute2, kmod
 Description: daemon for monitoring and adaptive tuning of system devices
  The tuned package contains a daemon that tunes system settings dynamically.
  It does so by monitoring the usage of several system components periodically.

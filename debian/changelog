@@ -1,3 +1,11 @@
+tuned (2.18.0-1) UNRELEASED; urgency=medium
+
+  * New upstream release (Closes: #1004865)
+  * drop libexec patch, it's not actually required
+  * also use libexec paths when installing files
+
+ -- Evgeni Golov <evgeni@debian.org>  Thu, 10 Feb 2022 20:20:41 +0000
+
 tuned (2.15.0-1) unstable; urgency=medium
 
   * New upstream release.

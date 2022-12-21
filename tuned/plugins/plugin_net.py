@@ -1,3 +1,4 @@
+import errno
 from . import base
 from .decorators import *
 import tuned.logs
@@ -20,6 +21,8 @@ class NetTuningPlugin(base.Plugin):
 		self._load_smallest = 0.05
 		self._level_steps = 6
 		self._cmd = commands()
+		self._re_ip_link_show_qlen = None
+		self._use_ip = True
 
 	def _init_devices(self):
 		self._devices_supported = True
@@ -123,6 +126,13 @@ class NetTuningPlugin(base.Plugin):
 			"tx": None }
 
 	@classmethod
+	def _get_config_options_channels(cls):
+		return { "rx": None,
+			"tx": None,
+			"other": None,
+			"combined": None }
+
+	@classmethod
 	def _get_config_options(cls):
 		return {
 			"dynamic": True,
@@ -132,6 +142,8 @@ class NetTuningPlugin(base.Plugin):
 			"coalesce": None,
 			"pause": None,
 			"ring": None,
+			"channels": None,
+			"txqueuelen": None,
 		}
 
 	def _init_stats_and_idle(self, instance, device):
@@ -275,6 +287,64 @@ class NetTuningPlugin(base.Plugin):
 			return int(value)
 		return None
 
+	def _call_ip_link(self, args=[]):
+		if not self._use_ip:
+			return None
+		args = ["ip", "link"] + args
+		(rc, out, err_msg) = self._cmd.execute(args, no_errors=[errno.ENOENT], return_err=True)
+		if rc == -errno.ENOENT:
+			log.warn("ip command not found, ignoring for other devices")
+			self._use_ip = False
+			return None
+		elif rc:
+			log.info("Problem calling ip command")
+			log.debug("(rc: %s, msg: '%s')" % (rc, err_msg))
+			return None
+		return out
+
+	def _ip_link_show(self, device=None):
+		args = ["show"]
+		if device:
+			args.append(device)
+		return self._call_ip_link(args)
+
+	@command_set("txqueuelen", per_device=True)
+	def _set_txqueuelen(self, value, device, sim):
+		if value is None:
+			return None
+		try:
+			int(value)
+		except ValueError:
+			log.warn("txqueuelen value '%s' is not integer" % value)
+			return None
+		if not sim:
+			# there is inconsistency in "ip", where "txqueuelen" is set as it, but is shown as "qlen"
+			res = self._call_ip_link(["set", "dev", device, "txqueuelen", value])
+			if res is None:
+				log.warn("Cannot set txqueuelen for device '%s'" % device)
+				return None
+		return value
+
+	def _get_re_ip_link_show_qlen(self):
+		if self._re_ip_link_show_qlen is None:
+			self._re_ip_link_show_qlen = re.compile(r".*\s+qlen\s+(\d+)")
+		return self._re_ip_link_show_qlen
+
+	@command_get("txqueuelen")
+	def _get_txqueuelen(self, device, ignore_missing=False):
+		out = self._ip_link_show(device)
+		if out is None:
+			if not ignore_missing:
+				log.info("Cannot get 'ip link show' result for txqueuelen value for device '%s'" % device)
+			return None
+		res = self._get_re_ip_link_show_qlen().search(out)
+		if res is None:
+			# We can theoretically get device without qlen (http://linux-ip.net/gl/ip-cref/ip-cref-node17.html)
+			if not ignore_missing:
+				log.info("Cannot get txqueuelen value from 'ip link show' result for device '%s'" % device)
+			return None
+		return res.group(1)
+
 	# d is dict: {parameter: value}
 	def _check_parameters(self, context, d):
 		if context == "features":
@@ -282,7 +352,8 @@ class NetTuningPlugin(base.Plugin):
 		params = set(d.keys())
 		supported_getter = { "coalesce": self._get_config_options_coalesce, \
 				"pause": self._get_config_options_pause, \
-				"ring": self._get_config_options_ring }
+				"ring": self._get_config_options_ring, \
+				"channels": self._get_config_options_channels }
 		supported = set(supported_getter[context]().keys())
 		if not params.issubset(supported):
 			log.error("unknown %s parameter(s): %s" % (context, str(params - supported)))
@@ -313,6 +384,29 @@ class NetTuningPlugin(base.Plugin):
 		l = [x for x in [re.split(r":\s*", x) for x in l] if len(x) == 2]
 		return dict(l)
 
+	# parse output of ethtool -l
+	def _parse_channels_parameters(self, s):
+		a = re.split(r"^Current hardware settings:$", s, flags=re.MULTILINE)
+		s = a[1]
+		s = self._cmd.multiple_re_replace(\
+				{"RX": "rx",
+				"TX": "tx",
+				"Other": "other",
+				"Combined": "combined"}, s)
+		l = s.split("\n")
+		l = [x for x in l if x != '']
+		l = [x for x in [re.split(r":\s*", x) for x in l] if len(x) == 2]
+		return dict(l)
+
+	def _replace_channels_parameters(self, context, params_list, dev_params):
+		mod_params_list = []
+		if "combined" in params_list:
+			mod_params_list.extend(["rx", params_list[1], "tx", params_list[1]])
+		else:
+			cnt = str(max(int(params_list[1]), int(params_list[3])))
+			mod_params_list.extend(["combined", cnt])
+		return dict(list(zip(mod_params_list[::2], mod_params_list[1::2])))
+
 	def _check_device_support(self, context, parameters, device, dev_params):
 		"""Filter unsupported parameters and log warnings about it
 
@@ -337,7 +431,8 @@ class NetTuningPlugin(base.Plugin):
 			parameters.pop(param, None)
 
 	def _get_device_parameters(self, context, device):
-		context2opt = { "coalesce": "-c", "features": "-k", "pause": "-a", "ring": "-g" }
+		context2opt = { "coalesce": "-c", "features": "-k", "pause": "-a", "ring": "-g", \
+				"channels": "-l"}
 		opt = context2opt[context]
 		ret, value = self._cmd.execute(["ethtool", opt, device])
 		if ret != 0 or len(value) == 0:
@@ -345,7 +440,8 @@ class NetTuningPlugin(base.Plugin):
 		context2parser = { "coalesce": self._parse_device_parameters, \
 				"features": self._parse_device_parameters, \
 				"pause": self._parse_pause_parameters, \
-				"ring": self._parse_ring_parameters }
+				"ring": self._parse_ring_parameters, \
+				"channels": self._parse_channels_parameters }
 		parser = context2parser[context]
 		d = parser(value)
 		if context == "coalesce" and not self._check_parameters(context, d):
@@ -362,10 +458,14 @@ class NetTuningPlugin(base.Plugin):
 		# check if device supports parameters and filter out unsupported ones
 		if dev_params:
 			self._check_device_support(context, d, device, dev_params)
+			# replace the channel parameters based on the device support
+			if context == "channels" and str(dev_params[next(iter(d))]) in ["n/a", "0"]:
+				d = self._replace_channels_parameters(context, self._cmd.dict2list(d), dev_params)
 
 		if not sim and len(d) != 0:
 			log.debug("setting %s: %s" % (context, str(d)))
-			context2opt = { "coalesce": "-C", "features": "-K", "pause": "-A", "ring": "-G" }
+			context2opt = { "coalesce": "-C", "features": "-K", "pause": "-A", "ring": "-G", \
+                                "channels": "-L"}
 			opt = context2opt[context]
 			# ignore ethtool return code 80, it means parameter is already set
 			self._cmd.execute(["ethtool", opt, device] + self._cmd.dict2list(d), no_errors = [80])
@@ -378,12 +478,14 @@ class NetTuningPlugin(base.Plugin):
 		if start:
 			params_current = self._get_device_parameters(context,
 					device)
+			if params_current is None or len(params_current) == 0:
+				return False
 			params_set = self._set_device_parameters(context,
 					value, device, verify,
 					dev_params = params_current)
 			# if none of parameters passed checks then the command completely
 			# failed
-			if len(params_set) == 0:
+			if params_set is None or len(params_set) == 0:
 				return False
 			relevant_params_current = [(param, value) for param, value
 					in params_current.items()
@@ -422,3 +524,7 @@ class NetTuningPlugin(base.Plugin):
 	@command_custom("ring", per_device = True)
 	def _ring(self, start, value, device, verify, ignore_missing):
 		return self._custom_parameters("ring", start, value, device, verify)
+
+	@command_custom("channels", per_device = True)
+	def _channels(self, start, value, device, verify, ignore_missing):
+		return self._custom_parameters("channels", start, value, device, verify)

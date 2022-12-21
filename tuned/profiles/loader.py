@@ -1,6 +1,10 @@
 import tuned.profiles.profile
 import tuned.profiles.variables
-from configobj import ConfigObj, ConfigObjError
+try:
+	from configparser import ConfigParser, Error
+except ImportError:
+	# python2.7 support, remove RHEL-7 support end
+	from ConfigParser import ConfigParser, Error
 import tuned.consts as consts
 import os.path
 import collections
@@ -77,6 +81,8 @@ class Loader(object):
 	def _load_profile(self, profile_names, profiles, processed_files):
 		for name in profile_names:
 			filename = self._profile_locator.get_config(name, processed_files)
+			if filename == "":
+				continue
 			if filename is None:
 				raise InvalidProfileException("Cannot find profile '%s' in '%s'." % (name, list(reversed(self._profile_locator._load_directories))))
 			processed_files.append(filename)
@@ -84,7 +90,7 @@ class Loader(object):
 			config = self._load_config_data(filename)
 			profile = self._profile_factory.create(name, config)
 			if "include" in profile.options:
-				include_names = re.split(r"\b\s*[,;]\s*", self._variables.expand(profile.options.pop("include")))
+				include_names = re.split(r"\s*[,;]\s*", self._variables.expand(profile.options.pop("include")))
 				self._load_profile(include_names, profiles, processed_files)
 
 			profiles.append(profile)
@@ -94,30 +100,22 @@ class Loader(object):
 
 	def _load_config_data(self, file_name):
 		try:
-			config_obj = ConfigObj(file_name, raise_errors = True, list_values = False, interpolation = False)
-		except ConfigObjError as e:
+			config_obj = ConfigParser()
+			config_obj.optionxform=str
+			with open(file_name) as f:
+				config_obj.readfp(f)
+		except Error as e:
 			raise InvalidProfileException("Cannot parse '%s'." % file_name, e)
 
 		config = collections.OrderedDict()
-		for section in list(config_obj.keys()):
-			config[section] = collections.OrderedDict()
-			try:
-				keys = list(config_obj[section].keys())
-			except AttributeError:
-				raise InvalidProfileException("Error parsing section '%s' in file '%s'." % (section, file_name))
-			for option in keys:
-				config[section][option] = config_obj[section][option]
-
 		dir_name = os.path.dirname(file_name)
-		# TODO: Could we do this in the same place as the expansion of other functions?
-		for section in config:
-			for option in config[section]:
+		for section in list(config_obj.sections()):
+			config[section] = collections.OrderedDict()
+			for option in config_obj.options(section):
+				config[section][option] = config_obj.get(section, option, raw=True)
 				config[section][option] = self._expand_profile_dir(dir_name, config[section][option])
-
-		# TODO: HACK, this needs to be solved in a better way (better config parser)
-		for unit_name in config:
-			if "script" in config[unit_name] and config[unit_name].get("script", None) is not None:
-				script_path = os.path.join(dir_name, config[unit_name]["script"])
-				config[unit_name]["script"] = [os.path.normpath(script_path)]
+			if config[section].get("script") is not None:
+				script_path = os.path.join(dir_name, config[section]["script"])
+				config[section]["script"] = [os.path.normpath(script_path)]
 
 		return config

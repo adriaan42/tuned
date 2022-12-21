@@ -48,7 +48,7 @@ except ImportError:
 import sys
 import os
 import time
-import configobj
+import collections
 import subprocess
 
 import tuned.logs
@@ -80,7 +80,7 @@ AUTHORS = [
 class Base(object):
 
 	"""
-	GUI class for program Tuned.
+	GUI class for program TuneD.
 	"""
 
 	is_admin = False
@@ -102,8 +102,8 @@ class Base(object):
 				self._gobj('tunedDaemonExceptionDialog').hide()
 				return True
 			else:
-				self.error_dialog('Tuned is shutting down.',
-								  'Reason: missing communication with Tuned daemon.'
+				self.error_dialog('TuneD is shutting down.',
+								  'Reason: missing communication with TuneD daemon.'
 								  )
 				return False
 		return True
@@ -508,8 +508,7 @@ class Base(object):
 
 	def data_to_profile_config(self):
 		name = self._gobj('entryProfileName').get_text()
-		config = configobj.ConfigObj(list_values = False,
-				interpolation = False)
+		config = collections.OrderedDict()
 
 		activated = self._gobj('comboboxIncludeProfile').get_active()
 		model = self._gobj('comboboxIncludeProfile').get_model()
@@ -706,7 +705,7 @@ class Base(object):
 				self.is_tuned_connection_ok()
 			else:
 				self._su_execute(['service', 'tuned', 'stop'])
-				self.error_dialog('Tuned Daemon is turned off',
+				self.error_dialog('TuneD Daemon is turned off',
 								  'Support of tuned is not running.')
 		elif switch == self._gobj('switchTunedStartupStartStop'):
 
