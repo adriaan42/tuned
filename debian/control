@@ -24,7 +24,7 @@ Depends: dbus,
          ethtool,
          gawk,
          ncat,
-         policykit-1 (>= 0.105-17~),
+         polkitd,
          procps,
          python3-dbus,
          python3-linux-procfs,
@@ -44,6 +44,7 @@ Description: daemon for monitoring and adaptive tuning of system devices
 Package: tuned-gtk
 Architecture: all
 Depends: gir1.2-gtk-3.0,
+         pkexec,
          powertop,
          python3-gi,
          tuned (= ${binary:Version}),
