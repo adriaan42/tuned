@@ -1,15 +1,21 @@
-tuned (2.19.0-1) UNRELEASED; urgency=medium
+tuned (2.19.0-1) unstable; urgency=medium
 
   [ Evgeni Golov ]
   * New upstream release (Closes: #1004865)
   * drop libexec patch, it's not actually required
   * also use libexec paths when installing files
+  * add new openshift profiles
+  * Standards-Version: 4.6.2
+  * add iproute2 to recommends
+  * drop configobj dependency
+  * drop dependency on python3-decorator
+  * switch policykit-1 dependency to polkitd/pkexec (Closes: #1025632)
 
   [ Adriaan Schmidt ]
   * add patch: path to grub config
-  * add patch: find grub-editenv
+  * add patch: find grub-editenv (Closes: #988851)
 
- -- Adriaan Schmidt <adriaan.schmidt@siemens.com>  Tue, 04 Oct 2022 16:08:36 +0200
+ -- Evgeni Golov <evgeni@debian.org>  Wed, 21 Dec 2022 20:10:30 +0100
 
 tuned (2.15.0-1) unstable; urgency=medium
 
