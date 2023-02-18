@@ -1,3 +1,15 @@
+tuned (2.20.0-1) unstable; urgency=medium
+
+  * New upstream release
+    + refresh debian/patches/etc-default.patch
+    + new cpu-partitioning-powersave profile
+    + new aws profile
+  * drop ncat Depends, the use was removed upstream
+  * add simple autopkgtests
+  * move tuned-gui manpage to tuned-gtk
+
+ -- Evgeni Golov <evgeni@debian.org>  Sun, 19 Feb 2023 14:22:27 +0100
+
 tuned (2.19.0-1) unstable; urgency=medium
 
   [ Evgeni Golov ]
