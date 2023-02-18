@@ -23,7 +23,6 @@ Architecture: all
 Depends: dbus,
          ethtool,
          gawk,
-         ncat,
          polkitd,
          procps,
          python3-dbus,
