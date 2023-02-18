@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+tuned-adm list
+
+tuned-adm active
+
+tuned-adm profile_info
+
+tuned-adm recommend

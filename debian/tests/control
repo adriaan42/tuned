@@ -1,0 +1,3 @@
+Tests: tuned-adm
+Restrictions: isolation-container, needs-root
+Depends: @
