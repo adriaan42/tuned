@@ -16,7 +16,7 @@ Subject: [PATCH] use /etc/default, not /etc/sysconfig on Debian
  CPUSPEED_STARTED="${STORAGE}/cpuspeed-started"
 -CPUSPEED_CFG="/etc/sysconfig/cpuspeed"
 +CPUSPEED_CFG="/etc/default/cpuspeed"
- CPUSPEED_INIT="/etc/init.d/cpuspeed"
+ CPUSPEED_INIT="/etc/rc.d/init.d/cpuspeed"
  # do not use cpuspeed
  CPUSPEED_USE="0"
 @@ -474,7 +474,7 @@
