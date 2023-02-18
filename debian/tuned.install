@@ -4,6 +4,7 @@ etc/modprobe.d/tuned.conf
 etc/tuned/active_profile
 etc/tuned/profile_mode
 etc/tuned/bootcmdline
+etc/tuned/cpu-partitioning-powersave-variables.conf
 etc/tuned/cpu-partitioning-variables.conf
 etc/tuned/post_loaded_profile
 etc/tuned/realtime-variables.conf
@@ -33,6 +34,7 @@ usr/lib/tuned/atomic-guest/
 usr/lib/tuned/atomic-host/
 usr/lib/tuned/balanced/
 usr/lib/tuned/cpu-partitioning/
+usr/lib/tuned/cpu-partitioning-powersave/
 usr/lib/tuned/default/
 usr/lib/tuned/desktop-powersave/
 usr/lib/tuned/desktop/
