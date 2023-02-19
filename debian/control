@@ -49,6 +49,7 @@ Depends: gir1.2-gtk-3.0,
          tuned (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends}
+Replaces: tuned (<< 2.20.0-1~)
 Description: GTK+ GUI for tuned
  The tuned package contains a daemon that tunes system settings dynamically.
  It does so by monitoring the usage of several system components periodically.

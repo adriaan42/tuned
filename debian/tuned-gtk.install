@@ -2,4 +2,5 @@ usr/lib/python*/dist-packages/tuned/gtk
 usr/sbin/tuned-gui
 usr/share/applications/tuned-gui.desktop
 usr/share/icons/hicolor/scalable/apps/tuned.svg
+usr/share/man/man8/tuned-gui.8
 usr/share/tuned/ui
