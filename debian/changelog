@@ -1,3 +1,12 @@
+tuned (2.20.0-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+
+  [ Helmut Grohne ]
+  * Fix FTBFS when systemd.pc changes systemdsystemunitdir (Closes: #1052703)
+
+ -- Jochen Sprickerhof <jspricke@debian.org>  Mon, 30 Oct 2023 18:17:33 +0100
+
 tuned (2.20.0-1) unstable; urgency=medium
 
   * New upstream release
