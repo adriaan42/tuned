@@ -4,6 +4,7 @@
 #export DH_VERBOSE = 1
 
 export DEB_PYTHON_INSTALL_LAYOUT=deb_system
+export deb_systemdsystemunitdir = $(shell pkg-config --variable=systemdsystemunitdir systemd | sed s,^/,,)
 
 %:
 	dh $@ --with python3

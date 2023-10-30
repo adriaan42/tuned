@@ -11,7 +11,7 @@ etc/tuned/realtime-variables.conf
 etc/tuned/realtime-virtual-guest-variables.conf
 etc/tuned/realtime-virtual-host-variables.conf
 etc/tuned/tuned-main.conf
-lib/systemd/system/tuned.service
+${env:deb_systemdsystemunitdir}/tuned.service
 usr/lib/python*/dist-packages/tuned/__init__.py
 usr/lib/python*/dist-packages/tuned/admin/
 usr/lib/python*/dist-packages/tuned/consts.py
