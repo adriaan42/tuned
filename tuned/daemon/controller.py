@@ -70,6 +70,12 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 	def terminate(self):
 		self._terminate.set()
 
+	def sighup(self):
+		if not self._daemon._sighup_processing.is_set():
+			self._daemon._sighup_processing.set()
+			if not self.reload():
+				self._daemon._sighup_processing.clear()
+
 	@exports.signal("sbs")
 	def profile_changed(self, profile_name, result, errstr):
 		pass
@@ -116,23 +122,26 @@ class Controller(tuned.exports.interfaces.ExportableInterface):
 				return False
 		return self._daemon.start()
 
+	def _stop(self, profile_switch = False):
+		if not self._daemon.is_running():
+			res = True
+		else:
+			res = self._daemon.stop(profile_switch = profile_switch)
+		self._timer_store.cancel_all()
+		return res
+
 	@exports.export("", "b")
 	def stop(self, caller = None):
 		if caller == "":
 			return False
-		if not self._daemon.is_running():
-			res = True
-		else:
-			res = self._daemon.stop()
-		self._timer_store.cancel_all()
-		return res
+		return self._stop(profile_switch = False)
 
 	@exports.export("", "b")
 	def reload(self, caller = None):
 		if caller == "":
 			return False
 		if self._daemon.is_running():
-			stop_ok = self.stop()
+			stop_ok = self._stop(profile_switch = True)
 			if not stop_ok:
 				return False
 		try:

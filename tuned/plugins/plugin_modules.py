@@ -134,8 +134,8 @@ class ModulesPlugin(base.Plugin):
 								ret = False
 		return ret
 
-	def _instance_unapply_static(self, instance, full_rollback = False):
-		if full_rollback:
+	def _instance_unapply_static(self, instance, rollback = consts.ROLLBACK_SOFT):
+		if rollback == consts.ROLLBACK_FULL:
 			self._clear_modprobe_file()
 
 	def _clear_modprobe_file(self):

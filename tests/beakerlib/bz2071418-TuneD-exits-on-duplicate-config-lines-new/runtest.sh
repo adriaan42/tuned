@@ -2,9 +2,9 @@
 # vim: dict+=/usr/share/beakerlib/dictionary.vim cpt=.,w,b,u,t,i,k
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-#   runtest.sh of /CoreOS/tuned/Regression/Tuned-takes-too-long-to-reload-start-when-ulimit
-#   Description: Test for BZ#1663412 (TuneD takes too long to reload/start when "ulimit)
-#   Author: Robin Hack <rhack@redhat.com>
+#   runtest.sh of /CoreOS/tuned/Regression/bz2071418-TuneD-exits-on-duplicate-config-lines-new
+#   Description: Test for BZ#2071418 (TuneD exits on duplicate config lines (new)
+#   Author: something else <rhack@redhat.com>
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
@@ -22,34 +22,48 @@ PACKAGE="tuned"
 rlJournalStart
     rlPhaseStartSetup
         rlAssertRpm $PACKAGE
+
+
         rlImport "tuned/basic"
-        tunedDisableSystemdRateLimitingStart
+        rlServiceStart "tuned"
+        tunedProfileBackup
+
+        rlRun "mkdir /etc/tuned/test-profile"
+        rlRun "pushd /etc/tuned/test-profile"
+        cat << EOF > tuned.conf
+[sysctl]
+kernel.sem = 1250 256000 100 8192
+kernel.sem = 1250 256000 100 8192
+
+[selinux]
+avc_cache_threshold=8192 
+avc_cache_threshold=16384
+EOF
+
+        rlRun "popd"
+
         rlRun "TmpDir=\$(mktemp -d)" 0 "Creating tmp directory"
         rlRun "pushd $TmpDir"
-        rlServiceStop "tuned"
-        rlFileBackup "/etc/tuned/tuned-main.conf"
     rlPhaseEnd
 
     rlPhaseStartTest
-        rlRun "sed 's/daemon = 1/daemon = 0/g' /etc/tuned/tuned-main.conf > /etc/tuned/tuned-main.conf.new"
-        rlRun "mv /etc/tuned/tuned-main.conf.new /etc/tuned/tuned-main.conf"
-        rlRun "ulimit -H -n 1048576"
-        rlRun "ulimit -S -n 1048576"
-        rlRun "tuned --debug 2>&1 | tee TEST_OUT"
-        rlAssertNotGrep "tuned.plugins.plugin_sysctl: executing \['sysctl'," TEST_OUT
+        rlRun "tuned-adm profile test-profile"
+        rlRun "tuned-adm verify"
+
+        rlAssertGrep "test-profile" "/etc/tuned/active_profile"
+
+	# last value from config is used
+	rlAssertGrep "16384$"  /sys/fs/selinux/avc/cache_threshold
     rlPhaseEnd
 
     rlPhaseStartCleanup
         rlRun "popd"
         rlRun "rm -r $TmpDir" 0 "Removing tmp directory"
 
-        killall tuned
-        rlRun "sleep 3"
-        killall tuned
-
-        tunedDisableSystemdRateLimitingEnd
-        rlFileRestore
+        tunedProfileRestore
         rlServiceRestore "tuned"
+
+        rlRun "rm -rf /etc/tuned/test-profile"
     rlPhaseEnd
 rlJournalPrintText
 rlJournalEnd

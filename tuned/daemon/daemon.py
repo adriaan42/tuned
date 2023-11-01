@@ -21,12 +21,14 @@ class Daemon(object):
 		self._update_interval = int(consts.CFG_DEF_UPDATE_INTERVAL)
 		self._dynamic_tuning = consts.CFG_DEF_DYNAMIC_TUNING
 		self._recommend_command = True
+		self._rollback = consts.CFG_DEF_ROLLBACK
 		if config is not None:
 			self._daemon = config.get_bool(consts.CFG_DAEMON, consts.CFG_DEF_DAEMON)
 			self._sleep_interval = int(config.get(consts.CFG_SLEEP_INTERVAL, consts.CFG_DEF_SLEEP_INTERVAL))
 			self._update_interval = int(config.get(consts.CFG_UPDATE_INTERVAL, consts.CFG_DEF_UPDATE_INTERVAL))
 			self._dynamic_tuning = config.get_bool(consts.CFG_DYNAMIC_TUNING, consts.CFG_DEF_DYNAMIC_TUNING)
 			self._recommend_command = config.get_bool(consts.CFG_RECOMMEND_COMMAND, consts.CFG_DEF_RECOMMEND_COMMAND)
+			self._rollback = config.get(consts.CFG_ROLLBACK, consts.CFG_DEF_ROLLBACK)
 		self._application = application
 		if self._sleep_interval <= 0:
 			self._sleep_interval = int(consts.CFG_DEF_SLEEP_INTERVAL)
@@ -57,6 +59,8 @@ class Daemon(object):
 		self._terminate_profile_switch = threading.Event()
 		# Flag which is set if there is no operation in progress
 		self._not_used = threading.Event()
+		# Flag which is set if SIGHUP is being processed
+		self._sighup_processing = threading.Event()
 		self._not_used.set()
 		self._profile_applied = threading.Event()
 
@@ -201,6 +205,7 @@ class Daemon(object):
 			exports.start()
 		profile_names = " ".join(self._active_profiles)
 		self._notify_profile_changed(profile_names, True, "OK")
+		self._sighup_processing.clear()
 
 		if self._daemon:
 			# In python 2 interpreter with applied patch for rhbz#917709 we need to periodically
@@ -229,23 +234,31 @@ class Daemon(object):
 
 		# if terminating due to profile switch
 		if self._terminate_profile_switch.is_set():
-			full_rollback = True
+			rollback = consts.ROLLBACK_FULL
 		else:
-			# with systemd it detects system shutdown and in such case it doesn't perform
-			# full cleanup, if not shutting down it means that TuneD was explicitly
-			# stopped by user and in such case do full cleanup, without systemd never
-			# do full cleanup
-			full_rollback = False
-			if self._full_rollback_required():
+			# Assume only soft rollback is needed. Soft rollback means reverting all
+			# non-persistent tunings applied by a plugin instance. In contrast to full
+			# rollback, information about what to revert is kept in RAM (volatile
+			# memory) -- TuneD data structures.
+			# With systemd TuneD detects system shutdown and in such a case it doesn't
+			# perform full cleanup. If the system is not shutting down, it means that TuneD
+			# was explicitly stopped by the user and in such case do the full cleanup. On
+			# systems without systemd, full cleanup is never performed.
+			rollback = consts.ROLLBACK_SOFT
+			if not self._full_rollback_required():
+				log.info("terminating TuneD due to system shutdown / reboot")
+			elif self._rollback == "not_on_exit":
+				# no rollback on TuneD exit whatsoever
+				rollback = consts.ROLLBACK_NONE
+				log.info("terminating TuneD and not rolling back any changes due to '%s' option in '%s'" % (consts.CFG_ROLLBACK, consts.GLOBAL_CONFIG_FILE))
+			else:
 				if self._daemon:
 					log.info("terminating TuneD, rolling back all changes")
-					full_rollback = True
+					rollback = consts.ROLLBACK_FULL
 				else:
 					log.info("terminating TuneD in one-shot mode")
-			else:
-				log.info("terminating TuneD due to system shutdown / reboot")
 		if self._daemon:
-			self._unit_manager.stop_tuning(full_rollback)
+			self._unit_manager.stop_tuning(rollback)
 		self._unit_manager.destroy_all()
 
 	def _save_active_profile(self, profile_names, manual):
@@ -339,7 +352,7 @@ class Daemon(object):
 			log.error("profile is not applied")
 			return False
 
-		# using deamon, the main loop mustn't exit before our completion
+		# using daemon, the main loop mustn't exit before our completion
 		self._not_used.clear()
 		log.info("verifying profile(s): %s" % self._profile.name)
 		ret = self._unit_manager.verify_tuning(ignore_missing)
