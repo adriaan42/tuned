@@ -1,4 +1,3 @@
-etc/dbus-1/system.d/com.redhat.tuned.conf
 etc/grub.d/00_tuned
 etc/modprobe.d/tuned.conf
 etc/tuned/active_profile
@@ -72,6 +71,7 @@ usr/libexec/tuned/defirqaffinity.py
 usr/sbin/tuned
 usr/sbin/tuned-adm
 usr/share/bash-completion/completions/tuned-adm
+usr/share/dbus-1/system.d/com.redhat.tuned.conf
 usr/share/doc/tuned/README
 usr/share/doc/tuned/README.NFV
 usr/share/doc/tuned/TIPS.txt
