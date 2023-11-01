@@ -60,6 +60,7 @@ usr/lib/tuned/realtime-virtual-host/
 usr/lib/tuned/realtime/
 usr/lib/tuned/recommend.d/
 usr/lib/tuned/sap-hana/
+usr/lib/tuned/sap-hana-kvm-guest/
 usr/lib/tuned/sap-netweaver/
 usr/lib/tuned/server-powersave/
 usr/lib/tuned/spectrumscale-ece/
