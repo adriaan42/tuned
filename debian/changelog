@@ -1,3 +1,15 @@
+tuned (2.21.0-1) unstable; urgency=medium
+
+  * New upstream release
+  * move com.redhat.tuned.conf dbus config to /usr/share
+  * new sap-hana-kvm-guest profile
+  * drop explicitly-use-bin-bash-for-tuned-scripts.patch
+  * README was renamed to README.md
+  * remove old dbus configuration from etc on upgrade
+  * package missing folders for state tracking (Closes: #1058910)
+
+ -- Evgeni Golov <evgeni@debian.org>  Fri, 29 Dec 2023 21:44:19 +0100
+
 tuned (2.20.0-1.1) unstable; urgency=medium
 
   * Non-maintainer upload.
