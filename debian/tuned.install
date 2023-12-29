@@ -9,6 +9,7 @@ etc/tuned/post_loaded_profile
 etc/tuned/realtime-variables.conf
 etc/tuned/realtime-virtual-guest-variables.conf
 etc/tuned/realtime-virtual-host-variables.conf
+etc/tuned/recommend.d/
 etc/tuned/tuned-main.conf
 ${env:deb_systemdsystemunitdir}/tuned.service
 usr/lib/python*/dist-packages/tuned/__init__.py
@@ -82,3 +83,5 @@ usr/share/man/man7/tuned-profiles*
 usr/share/man/man8/tuned-adm.8
 usr/share/man/man8/tuned.8
 usr/share/polkit-1/actions/com.redhat.tuned.policy
+var/lib/tuned/
+var/log/tuned/
