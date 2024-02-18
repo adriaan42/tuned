@@ -46,5 +46,5 @@ Subject: [PATCH] use /etc/default, not /etc/sysconfig on Debian
 -IRQBALANCE_SYSCONFIG_FILE = "/etc/sysconfig/irqbalance"
 +IRQBALANCE_SYSCONFIG_FILE = "/etc/default/irqbalance"
  
- # built-in functions configuration
- SYSFS_CPUS_PATH = "/sys/devices/system/cpu"
+ # acpi plugin configuration
+ ACPI_DIR = "/sys/firmware/acpi"
