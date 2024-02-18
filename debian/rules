@@ -8,3 +8,9 @@ export deb_systemdsystemunitdir = $(shell pkg-config --variable=systemdsystemuni
 
 %:
 	dh $@ --with python3
+
+execute_after_dh_auto_build:
+	make html
+
+execute_before_dh_install:
+	make install-html DESTDIR=$(CURDIR)/debian/tmp

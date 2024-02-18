@@ -77,6 +77,7 @@ usr/share/dbus-1/system.d/com.redhat.tuned.conf
 usr/share/doc/tuned/README.md
 usr/share/doc/tuned/README.NFV
 usr/share/doc/tuned/TIPS.txt
+usr/share/doc/tuned/manual
 usr/share/man/man5/tuned-main.conf.5
 usr/share/man/man5/tuned.conf.5
 usr/share/man/man7/tuned-profiles*

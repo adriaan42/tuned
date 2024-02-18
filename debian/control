@@ -2,7 +2,8 @@ Source: tuned
 Section: admin
 Priority: optional
 Maintainer: Evgeni Golov <evgeni@debian.org>
-Build-Depends: debhelper-compat (= 13),
+Build-Depends: asciidoctor,
+               debhelper-compat (= 13),
                desktop-file-utils,
                dh-python,
                ethtool,

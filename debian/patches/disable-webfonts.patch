@@ -1,0 +1,18 @@
+From: Evgeni Golov <evgeni@debian.org>
+Subject: disable webfonts in manual
+
+Forwarded: no
+
+diff --git a/doc/manual/Makefile b/doc/manual/Makefile
+index fb14136..e87b373 100644
+--- a/doc/manual/Makefile
++++ b/doc/manual/Makefile
+@@ -1,7 +1,7 @@
+ .PHONY: clean
+
+ index.html: master.adoc assemblies/*.adoc meta/*.adoc modules/performance/*.adoc
+-	asciidoctor -o index.html master.adoc || asciidoc -o index.html master.adoc
++	asciidoctor -o index.html -a webfonts! master.adoc || asciidoc -o index.html master.adoc
+
+ install: index.html
+ 	install -Dpm 0644 index.html $(DESTDIR)$(DOCDIR)/manual/index.html
