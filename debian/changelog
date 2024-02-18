@@ -1,3 +1,12 @@
+tuned (2.21.0-2) unstable; urgency=medium
+
+  * Don't build-depend on systemd, systemd-dev is enough for building
+    (Closes: #1060596)
+  * Build-depend on pkgconf not pkg-config
+  * build HTML documentation
+
+ -- Evgeni Golov <evgeni@debian.org>  Sun, 18 Feb 2024 19:28:19 +0100
+
 tuned (2.21.0-1) unstable; urgency=medium
 
   * New upstream release
