@@ -66,6 +66,9 @@ SYSTEMD_CPUAFFINITY_VAR = "CPUAffinity"
 # irqbalance plugin configuration
 IRQBALANCE_SYSCONFIG_FILE = "/etc/sysconfig/irqbalance"
 
+# acpi plugin configuration
+ACPI_DIR = "/sys/firmware/acpi"
+
 # built-in functions configuration
 SYSFS_CPUS_PATH = "/sys/devices/system/cpu"
 
@@ -86,6 +89,13 @@ ROLLBACK_FULL = 2
 # tuned-gui
 PREFIX_PROFILE_FACTORY = "System"
 PREFIX_PROFILE_USER = "User"
+
+# PPD-to-tuned API translation daemon configuration
+PPD_NAMESPACE = "net.hadess.PowerProfiles"
+PPD_DBUS_BUS = PPD_NAMESPACE
+PPD_DBUS_OBJECT = "/net/hadess/PowerProfiles"
+PPD_DBUS_INTERFACE = PPD_DBUS_BUS
+PPD_CONFIG_FILE = "/etc/tuned/ppd.conf"
 
 # After adding new option to tuned-main.conf add here its name with CFG_ prefix
 # and eventually default value with CFG_DEF_ prefix (default is None)
