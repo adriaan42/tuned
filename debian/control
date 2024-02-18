@@ -33,7 +33,7 @@ Depends: dbus,
          virt-what,
          ${misc:Depends},
          ${python3:Depends}
-Recommends: linux-cpupower, dmidecode, hdparm, iproute2, kmod
+Recommends: linux-cpupower, linux-perf, dmidecode, hdparm, iproute2, kmod
 Description: daemon for monitoring and adaptive tuning of system devices
  The tuned package contains a daemon that tunes system settings dynamically.
  It does so by monitoring the usage of several system components periodically.
