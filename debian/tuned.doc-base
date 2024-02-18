@@ -1,0 +1,10 @@
+Document: tuned
+Title: TuneD: Optimizing system throughput, latency, and power consumption
+Abstract: This documentation explains how to use the TuneD application
+ to monitor and optimize the throughput, latency, and power consumption
+ of your system in different scenarios.
+Section: System/Administration
+
+Format: HTML
+Index: /usr/share/doc/tuned/manual/index.html
+Files: /usr/share/doc/tuned/manual/*.html
