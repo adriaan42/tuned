@@ -14,3 +14,4 @@ execute_after_dh_auto_build:
 
 execute_before_dh_install:
 	make install-html DESTDIR=$(CURDIR)/debian/tmp
+	make install-ppd DESTDIR=$(CURDIR)/debian/tmp

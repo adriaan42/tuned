@@ -61,6 +61,17 @@ Description: GTK+ GUI for tuned
  This package contains the GTK+ GUI that can control tuned and provides simple
  profile editor.
 
+Package: tuned-ppd
+Architecture: all
+Depends: tuned (= ${binary:Version}),
+         ${misc:Depends},
+         ${python3:Depends}
+Conflicts: power-profiles-daemon
+Provides: power-profiles-daemon
+Description: PPD compatibility daemon
+ An API translation daemon that allows applications to easily transition
+ to TuneD from power-profiles-daemon (PPD).
+
 Package: tuned-utils
 Architecture: all
 Depends: powertop,

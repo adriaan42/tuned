@@ -1,0 +1,7 @@
+usr/sbin/tuned-ppd
+${env:deb_systemdsystemunitdir}/tuned-ppd.service
+usr/lib/python*/dist-packages/tuned/ppd/
+usr/share/dbus-1/system-services/net.hadess.PowerProfiles.service
+usr/share/dbus-1/system.d/net.hadess.PowerProfiles.conf
+usr/share/polkit-1/actions/net.hadess.PowerProfiles.policy
+etc/tuned/ppd.conf
