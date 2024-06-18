@@ -1,0 +1,106 @@
+From bb3982341031c24b0921d3ce5236a3c982da6ecf Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavol=20=C5=BD=C3=A1=C4=8Dik?= <zacik.pa@gmail.com>
+Date: Wed, 19 Jun 2024 15:24:10 +0200
+Subject: [PATCH 1/2] Rename TUNED_PROFILESDIR to TUNED_PROFILES_DIR
+
+---
+ Makefile | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index cd8fc0cc..a8c97839 100644
+--- a/Makefile
++++ b/Makefile
+@@ -46,8 +46,8 @@ ifeq ($(PYTHON_SITELIB),)
+ $(error Failed to determine python library directory)
+ endif
+ KERNELINSTALLHOOKDIR = /usr/lib/kernel/install.d
+-TUNED_PROFILESDIR = /usr/lib/tuned/profiles
+-TUNED_RECOMMEND_DIR = $(TUNED_PROFILESDIR)/recommend.d
++TUNED_PROFILES_DIR = /usr/lib/tuned/profiles
++TUNED_RECOMMEND_DIR = $(TUNED_PROFILES_DIR)/recommend.d
+ TUNED_USER_RECOMMEND_DIR = $(SYSCONFDIR)/tuned/recommend.d
+ BASH_COMPLETIONS = $(DATADIR)/bash-completion/completions
+ 
+@@ -128,7 +128,7 @@ clean-html:
+ 
+ install-dirs:
+ 	mkdir -p $(DESTDIR)$(PYTHON_SITELIB)
+-	mkdir -p $(DESTDIR)$(TUNED_PROFILESDIR)
++	mkdir -p $(DESTDIR)$(TUNED_PROFILES_DIR)
+ 	mkdir -p $(DESTDIR)/var/lib/tuned
+ 	mkdir -p $(DESTDIR)/var/log/tuned
+ 	mkdir -p $(DESTDIR)/run/tuned
+@@ -169,16 +169,16 @@ install: install-dirs
+ 	install -Dpm 0644 modules.conf $(DESTDIR)$(SYSCONFDIR)/modprobe.d/tuned.conf
+ 
+ 	# profiles & system config
+-	cp -a profiles/* $(DESTDIR)$(TUNED_PROFILESDIR)/
+-	mv $(DESTDIR)$(TUNED_PROFILESDIR)/realtime/realtime-variables.conf \
++	cp -a profiles/* $(DESTDIR)$(TUNED_PROFILES_DIR)/
++	mv $(DESTDIR)$(TUNED_PROFILES_DIR)/realtime/realtime-variables.conf \
+ 		$(DESTDIR)$(SYSCONFDIR)/tuned/realtime-variables.conf
+-	mv $(DESTDIR)$(TUNED_PROFILESDIR)/realtime-virtual-guest/realtime-virtual-guest-variables.conf \
++	mv $(DESTDIR)$(TUNED_PROFILES_DIR)/realtime-virtual-guest/realtime-virtual-guest-variables.conf \
+ 		$(DESTDIR)$(SYSCONFDIR)/tuned/realtime-virtual-guest-variables.conf
+-	mv $(DESTDIR)$(TUNED_PROFILESDIR)/realtime-virtual-host/realtime-virtual-host-variables.conf \
++	mv $(DESTDIR)$(TUNED_PROFILES_DIR)/realtime-virtual-host/realtime-virtual-host-variables.conf \
+ 		$(DESTDIR)$(SYSCONFDIR)/tuned/realtime-virtual-host-variables.conf
+-	mv $(DESTDIR)$(TUNED_PROFILESDIR)/cpu-partitioning/cpu-partitioning-variables.conf \
++	mv $(DESTDIR)$(TUNED_PROFILES_DIR)/cpu-partitioning/cpu-partitioning-variables.conf \
+ 		$(DESTDIR)$(SYSCONFDIR)/tuned/cpu-partitioning-variables.conf
+-	mv $(DESTDIR)$(TUNED_PROFILESDIR)/cpu-partitioning-powersave/cpu-partitioning-powersave-variables.conf \
++	mv $(DESTDIR)$(TUNED_PROFILES_DIR)/cpu-partitioning-powersave/cpu-partitioning-powersave-variables.conf \
+ 		$(DESTDIR)$(SYSCONFDIR)/tuned/cpu-partitioning-powersave-variables.conf
+ 	install -pm 0644 recommend.conf $(DESTDIR)$(TUNED_RECOMMEND_DIR)/50-tuned.conf
+ 
+
+From b3b0892d5b364680ea5abd320b72f27efc294cb4 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavol=20=C5=BD=C3=A1=C4=8Dik?= <zacik.pa@gmail.com>
+Date: Wed, 19 Jun 2024 15:29:03 +0200
+Subject: [PATCH 2/2] Install script functions and recommend.d to
+ /usr/lib/tuned/
+
+In #615, they were accidentally moved to /usr/lib/tuned/profiles/
+where all profiles were migrated.
+
+This also changes the location of `functions` file within
+the repository, separating it from the profiles themselves.
+
+Resolves #642.
+---
+ Makefile                        | 8 ++++++--
+ profiles/functions => functions | 0
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+ rename profiles/functions => functions (100%)
+
+diff --git a/Makefile b/Makefile
+index a8c97839..b81790ba 100644
+--- a/Makefile
++++ b/Makefile
+@@ -46,8 +46,9 @@ ifeq ($(PYTHON_SITELIB),)
+ $(error Failed to determine python library directory)
+ endif
+ KERNELINSTALLHOOKDIR = /usr/lib/kernel/install.d
+-TUNED_PROFILES_DIR = /usr/lib/tuned/profiles
+-TUNED_RECOMMEND_DIR = $(TUNED_PROFILES_DIR)/recommend.d
++TUNED_SYSTEM_DIR = /usr/lib/tuned
++TUNED_PROFILES_DIR = $(TUNED_SYSTEM_DIR)/profiles
++TUNED_RECOMMEND_DIR = $(TUNED_SYSTEM_DIR)/recommend.d
+ TUNED_USER_RECOMMEND_DIR = $(SYSCONFDIR)/tuned/recommend.d
+ BASH_COMPLETIONS = $(DATADIR)/bash-completion/completions
+ 
+@@ -182,6 +183,9 @@ install: install-dirs
+ 		$(DESTDIR)$(SYSCONFDIR)/tuned/cpu-partitioning-powersave-variables.conf
+ 	install -pm 0644 recommend.conf $(DESTDIR)$(TUNED_RECOMMEND_DIR)/50-tuned.conf
+ 
++	# bash functions used by profile scripts
++	install -Dpm 0644 functions $(DESTDIR)$(TUNED_SYSTEM_DIR)
++
+ 	# bash completion
+ 	install -Dpm 0644 tuned-adm.bash $(DESTDIR)$(BASH_COMPLETIONS)/tuned-adm
+ 
+diff --git a/profiles/functions b/functions
+similarity index 100%
+rename from profiles/functions
+rename to functions

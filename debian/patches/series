@@ -2,3 +2,4 @@ etc-default.patch
 path-to-grub.cfg.patch
 find-alternative-executable-for-grub2-editenv.patch
 disable-webfonts.patch
+644.patch
