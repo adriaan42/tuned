@@ -90,7 +90,7 @@ class commands:
 			return list(d.values())[mo.lastindex - 1]
 		return None
 
-	def write_to_file(self, f, data, makedir = False, no_error = False):
+	def write_to_file(self, f, data, makedir = False, no_error = False, ignore_same = False):
 		"""Write data to a file.
 
 		Parameters:
@@ -98,6 +98,7 @@ class commands:
 		data -- data to write
 		makedir -- if True and the path doesn't exist, it will be created
 		no_error -- if True errors are silenced, it can be also list of ignored errnos
+		ignore_same -- if True and the write would not change the file, it is skipped
 
 		Return:
 		bool -- True on success
@@ -110,6 +111,9 @@ class commands:
 		try:
 			if makedir:
 				os.makedirs(d)
+			if ignore_same and self.read_file(f, no_error=True).strip() == str(data):
+				self._debug("Skipping the write to file '%s', the content would not change" % f)
+				return True
 			fd = open(f, "w")
 			fd.write(str(data))
 			fd.close()
@@ -124,9 +128,9 @@ class commands:
 	def read_file(self, f, err_ret = "", no_error = False):
 		old_value = err_ret
 		try:
-			f = open(f, "r")
-			old_value = f.read()
-			f.close()
+			fd = open(f, "r")
+			old_value = fd.read()
+			fd.close()
 		except (OSError,IOError) as e:
 			if not no_error:
 				self._error("Error when reading file '%s': '%s'" % (f, e))
@@ -208,12 +212,12 @@ class commands:
 
 		return self.write_to_file(f, data)
 
-	# calcualtes md5sum of file 'f'
+	# calcualates md5sum of file 'f'
 	def md5sum(self, f):
 		data = self.read_file(f)
 		return hashlib.md5(str(data).encode("utf-8")).hexdigest()
 
-	# calcualtes sha256sum of file 'f'
+	# calcualates sha256sum of file 'f'
 	def sha256sum(self, f):
 		data = self.read_file(f)
 		return hashlib.sha256(str(data).encode("utf-8")).hexdigest()
@@ -442,12 +446,12 @@ class commands:
 		return [str(v).replace(r"\,", ",") for v in l]
 
 	# Do not make balancing on patched Python 2 interpreter (rhbz#1028122).
-	# It means less CPU usage on patchet interpreter. On non-patched interpreter
+	# It means less CPU usage on patched interpreter. On non-patched interpreter
 	# it is not allowed to sleep longer than 50 ms.
 	def wait(self, terminate, time):
 		try:
 			return terminate.wait(time, False)
-		except:
+		except TypeError as e:
 			return terminate.wait(time)
 
 	def get_size(self, s):

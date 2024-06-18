@@ -93,15 +93,16 @@ class Plugin(object):
 	# Interface for manipulation with instances of the plugin.
 	#
 
-	def create_instance(self, name, devices_expression, devices_udev_regex, script_pre, script_post, options):
+	def create_instance(self, name, priority, devices_expression, devices_udev_regex, script_pre, script_post, options):
 		"""Create new instance of the plugin and seize the devices."""
 		if name in self._instances:
 			raise Exception("Plugin instance with name '%s' already exists." % name)
 
 		effective_options = self._get_effective_options(options)
-		instance = self._instance_factory.create(self, name, devices_expression, devices_udev_regex, \
+		instance = self._instance_factory.create(self, name, priority, devices_expression, devices_udev_regex, \
 			script_pre, script_post, effective_options)
 		self._instances[name] = instance
+		self._instances = collections.OrderedDict(sorted(self._instances.items(), key=lambda x: x[1].priority))
 
 		return instance
 
@@ -263,6 +264,7 @@ class Plugin(object):
 			self._call_device_script(instance, instance.script_post,
 					"apply", instance.assigned_devices)
 		if instance.has_dynamic_tuning and self._global_cfg.get(consts.CFG_DYNAMIC_TUNING, consts.CFG_DEF_DYNAMIC_TUNING):
+			self._instance_init_dynamic(instance)
 			self._run_for_each_device(instance, self._instance_apply_dynamic, instance.assigned_devices)
 		instance.processed_devices.update(instance.assigned_devices)
 		instance.assigned_devices.clear()
@@ -332,6 +334,9 @@ class Plugin(object):
 		self._cleanup_all_device_commands(instance,
 				instance.processed_devices)
 		self._cleanup_all_non_device_commands(instance)
+
+	def _instance_init_dynamic(self, instance):
+		pass
 
 	def _instance_apply_dynamic(self, instance, device):
 		for option in [opt for opt in self._options_used_by_dynamic if self._storage_get(instance, self._commands[opt], device) is None]:
