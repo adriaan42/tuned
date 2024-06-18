@@ -1,3 +1,9 @@
+tuned (2.23.0-1) UNRELEASED; urgency=medium
+
+  * New upstream release
+
+ -- Evgeni Golov <evgeni@debian.org>  Tue, 18 Jun 2024 18:59:50 +0200
+
 tuned (2.22.1-1) unstable; urgency=medium
 
   * New upstream release
