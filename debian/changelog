@@ -1,3 +1,9 @@
+tuned (2.23.0-1~bpo12+1) bookworm-backports; urgency=medium
+
+  * Rebuild for bookworm-backports.
+
+ -- Adriaan Schmidt <adriaan.schmidt@siemens.com>  Fri, 21 Jun 2024 10:25:40 +0200
+
 tuned (2.23.0-1) UNRELEASED; urgency=medium
 
   * New upstream release
