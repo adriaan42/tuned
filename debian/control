@@ -13,7 +13,7 @@ Build-Depends: asciidoctor,
                python3-dbus,
                python3-gi,
                python3-pyudev,
-               systemd-dev,
+               systemd,
 Standards-Version: 4.6.2
 Homepage: https://tuned-project.org/
 Vcs-Git: https://salsa.debian.org/debian/tuned.git
